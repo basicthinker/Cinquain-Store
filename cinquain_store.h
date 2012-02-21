@@ -75,7 +75,8 @@ int cinquainDeleteBufferHost(const char **value);
 // Returns the length of data actually written.
 // Normally it should equal to value_length.
 int cinquainWriteRange(const char *key, const int key_length,
-                       const char *value, const int value_length);
+                       offset_t offset,
+                       const char *value, const offset_t value_length);
 
 // Appends data to the value associated with the specified key.
 // Since this function is often used continuously, the parameter
@@ -94,7 +95,7 @@ int cinquainWriteRange(const char *key, const int key_length,
 //    }
 //
 offset_t cinquainAppend(const char *key, const int key_length,
-                        const char *value, const int value_length,
+                        const char *value, const offset_t value_length,
                         offset_t current_length);
 
 // Atomically increases the reference count (an integer value)

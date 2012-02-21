@@ -71,12 +71,13 @@ int cinquainDeleteBufferHost(const char **value) {
 }
 
 int cinquainWriteRange(const char *key, const int key_length,
-                       const char *value, const int value_length) {
+                       offset_t offset,
+                       const char *value, const offset_t value_length) {
   return 0;
 }
 
 offset_t cinquainAppend(const char *key, const int key_length,
-                        const char *value, const int value_length,
+                        const char *value, const offset_t value_length,
                         offset_t current_length) {
   return 0;
 }

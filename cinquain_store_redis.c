@@ -24,19 +24,50 @@
 //  Modified by Weichao Guo <guoweichao2010@gmail.com>.
 //
 
+// const varibles
+#define SERVER_CONFIG redis_server.config
+#define BLOCK_SIZE (512*1024*1024) // bytes
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "cinquain_store.h"
+#include "hiredis/hiredis.h"
+
+
+// redis context & reply handler
+redisContext *c[128];
+redisReply *reply[128];
+redisServerNum;
 
 int cinquainInitBackStore(const int argc, const char *argv[]) {
-  return 0;
+    
+    struct timeval timeout = {1, 500000}; // 1.5 seconds
+    char *ipAddress;
+    unsigned int port;
+    //read redis server config & get connections
+    FILE *fp = fopen(SERVER_CONFIG, "r");
+    while(!feof(fp)) {
+        fscanf(fp, "%s %d\n", ipAddress, &port);
+        c[redisServerNum] = redisConnectWithTimeout(ipAddress, port, timeout);
+        c[redisServerNum]->err ? 0:redisServerNum++;
+    }
+    fclose(fp);
+    return redisServerNum;
 }
 
 char **cinquainReadRange(const char *key, const int key_length,
                          const offset_t offset, const offset_t length) {
-  return 0;
+    int i = key[0] % redisServerNum;
+    // append one byte to key for extend blocks, limit file size < 128 GB.
+    char block = offset / BLOCK_SIZE + 1;
+    reply[i] = redisCommand(c[i], "GETRANGE %s%c %u %u", key, block, offset, offset+BLOCK_SIZE);
+    return &reply->str;
 }
 
 int cinquainDeleteBufferHost(const char **value) {
-  return 0;
+    freeReplyObject(cinquainBufferHost(value, redisReply, str));
+    return 0;
 }
 
 int cinquainWriteRange(const char *key, const int key_length,

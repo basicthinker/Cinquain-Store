@@ -38,10 +38,13 @@
 // redis context & reply handler
 redisContext *c[256];
 redisReply *reply[256];
+<<<<<<< HEAD
 // redis server config
 char *redisIp[256];
 unsigned int redisPort[256];
 unsigned int redisServerNum = 0;
+=======
+>>>>>>> 88e2844d745825a8f0b4145dcba9356493eb69d0
 
 int cinquainInitBackStore(const int argc, const char *argv[]) {
     
@@ -52,6 +55,7 @@ int cinquainInitBackStore(const int argc, const char *argv[]) {
     //read redis server config & get connections
     FILE *fp = fopen(SERVER_CONFIG, "r");
     while(!feof(fp)) {
+<<<<<<< HEAD
         fscanf(fp, "%s %u\n", ip, &port);
         c[i] = redisConnectWithTimeout(ip, port, timeout);
         if (!c[i]->err) {
@@ -59,6 +63,8 @@ int cinquainInitBackStore(const int argc, const char *argv[]) {
             strcpy(redisIp[i], ip);
             redisPort[i++] = port;
         }
+=======
+>>>>>>> 88e2844d745825a8f0b4145dcba9356493eb69d0
     }
     fclose(fp);
     redisServerNum = i;
@@ -69,6 +75,7 @@ char **cinquainReadRange(const char *key, const int key_length,
                          const offset_t offset, const offset_t length) {
     int i = key[0] % redisServerNum;
     // append one byte to key for extend blocks, limit file size < 127 GB.
+<<<<<<< HEAD
     char startBlock = offset / BLOCK_SIZE + 1;
     char currentBlock = startBlock;
     char endBlock = (offset + length) / BLOCK_SIZE + 1;
@@ -102,6 +109,8 @@ char **cinquainReadRange(const char *key, const int key_length,
     c[i] = (reply[i]->type!=REDIS_REPLY_ERROR ? c[i] : redisConnect(redisIp[i], redisPort[i]));
     freeReplyObject(reply[i]);
 
+=======
+>>>>>>> 88e2844d745825a8f0b4145dcba9356493eb69d0
     return &(reply[i]->str);
 }
 
@@ -114,6 +123,7 @@ int cinquainWriteRange(const char *key, const int key_length,
                        offset_t offset,
                        const char *value, const offset_t value_length) {
     int i = key[0] % redisServerNum;
+<<<<<<< HEAD
     offset_t len = 0;
     const char *cur = value;
     // append one byte to key for extend blocks, limit file size < 127 GB.
@@ -154,11 +164,14 @@ int cinquainWriteRange(const char *key, const int key_length,
     freeReplyObject(reply[i]);
 
     return len;
+=======
+>>>>>>> 88e2844d745825a8f0b4145dcba9356493eb69d0
 }
 
 offset_t cinquainAppend(const char *key, const int key_length,
                         const char *value, const offset_t value_length,
                         offset_t current_length) {
+<<<<<<< HEAD
      return cinquainWriteRange(key, key_length, current_length, value, value_length) + current_length;
 }
 
@@ -184,10 +197,14 @@ int cinquainDecrease(const char *key, const int key_length) {
     freeReplyObject(reply[i]);
 
     return ret;
+=======
+     
+>>>>>>> 88e2844d745825a8f0b4145dcba9356493eb69d0
 }
 
 int CinquainRemove(const char *key, const int key_length) {
     int i = key[0] % redisServerNum;
+<<<<<<< HEAD
     int blockNum, replyNum;
     reply[i] = redisCommand(c[i], "GET %s%c", key, 0xff);
     blockNum = reply[i]->type!=REDIS_REPLY_ERROR ? reply[i]->integer : 0;
@@ -210,6 +227,9 @@ int CinquainRemove(const char *key, const int key_length) {
     freeReplyObject(reply[i]);
 
     return replyNum;
+=======
+    
+>>>>>>> 88e2844d745825a8f0b4145dcba9356493eb69d0
 }
 
 

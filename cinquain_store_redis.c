@@ -47,7 +47,7 @@ int cinquainInitBackStore(const int argc, const char *argv[]) {
     struct timeval timeout = {1, 500000}; // 1.5 seconds
     char ip[16];
     unsigned int port;
-    int i=0;
+    unsigned int i=0;
     // server config param must be given 
     if (argc < 2)
         return 0;
@@ -80,20 +80,21 @@ char **cinquainReadRange(const char *key, const int key_length,
     int end;
 
     //pipeline commands
-    while (currentBlock < endBlock) {
-        end = offset+length-(currentBlock-startBlock)*BLOCK_SIZE;
-        end = (end<BLOCK_SIZE) ? end : BLOCK_SIZE;
-        redisAppendCommand(c[i], "GETRANGE %s%c %u %u", key, currentBlock++, start, end);
+    while (currentBlock <= endBlock) {
+        end = offset+length-1-(currentBlock-startBlock)*BLOCK_SIZE;
+        end = (end<BLOCK_SIZE-1) ? end : BLOCK_SIZE-1;
+        redisAppendCommand(c[i], "GETRANGE %b%b %u %u", key, key_length, &currentBlock, 1, start, end);
+        currentBlock++;
         start = 0;
     }
 
     //handle replies
-    redisGetReply(c[i], &reply[i]);
+    redisGetReply(c[i], (void **)&reply[i]);
     while (startBlock<endBlock && reply[i]->type!=REDIS_REPLY_ERROR) {
         memcpy(cur, reply[i]->str, reply[i]->len);
         cur += sizeof(char) * reply[i]->len;
         startBlock++;
-        redisGetReply(c[i], &reply[i]);
+        redisGetReply(c[i], (void **)&reply[i]);
     }
 
     reply[i]->type==REDIS_REPLY_ERROR ? (free(buffer), buffer=NULL, cur=NULL) : memcpy(cur, reply[i]->str, reply[i]->len);
@@ -102,7 +103,7 @@ char **cinquainReadRange(const char *key, const int key_length,
     reply[i]->str = buffer;
     // reconnect redis server as error occurs
     c[i] = (reply[i]->type!=REDIS_REPLY_ERROR ? c[i] : redisConnect(redisIp[i], redisPort[i]));
-    freeReplyObject(reply[i]);
+    //freeReplyObject(reply[i]);
 
     return &(reply[i]->str);
 }
@@ -116,6 +117,7 @@ int cinquainWriteRange(const char *key, const int key_length,
                        offset_t offset,
                        const char *value, const offset_t value_length) {
     int i = key[0] % redisServerNum;
+    char ff = 0xff;
     offset_t len = 0;
     const char *cur = value;
     // append one byte to key for extend blocks, limit file size < 127 GB.
@@ -125,19 +127,21 @@ int cinquainWriteRange(const char *key, const int key_length,
     int blockNum;
     //write value in 512 MB BLOCK one by one 
     //pipeline commands
-    redisAppendCommand(c[i], "SETRANGE %s%c %u %s", key, currentBlock++, offset, cur);
+    redisAppendCommand(c[i], "SETRANGE %b%b %u %b", key, key_length, &currentBlock, 1, offset, cur, value_length);
+    currentBlock++;
     while (currentBlock <= endBlock) {
         cur = value + (currentBlock-startBlock) * BLOCK_SIZE - offset;
-        redisAppendCommand(c[i], "SET %s%c %s", key, currentBlock++, cur);
+        redisAppendCommand(c[i], "SET %b%b %b", key, key_length, &currentBlock, 1, cur, value_length);
+        currentBlock++;
     }
     //set block num
-    redisAppendCommand(c[i], "SET %s%c %s", key, 0xff, endBlock);
+    redisAppendCommand(c[i], "SET %b%b %d", key, key_length, &ff, 1, endBlock);
 
     //handle replies
     while (startBlock <= endBlock) {
-        redisGetReply(c[i], &reply[i]);
-        if (reply[i]->type != REDIS_REPLY_ERROR)
+        if (redisGetReply(c[i], (void **)&reply[i]) == REDIS_OK) { 
             len += reply[i]->integer;
+        }
         else {
             freeReplyObject(reply[i]);
             break;
@@ -147,13 +151,13 @@ int cinquainWriteRange(const char *key, const int key_length,
     }
     // handle the set block num command
     if (startBlock > endBlock) {
-        redisGetReply(c[i], &reply[i]);
-        freeReplyObject(reply[i]);
+        if (redisGetReply(c[i], (void **)&reply[i]) == REDIS_OK)
+            freeReplyObject(reply[i]);
     }
 
     // reconnect redis server as error occurs
     c[i] = (reply[i]->type!=REDIS_REPLY_ERROR ? c[i] : redisConnect(redisIp[i], redisPort[i]));
-    freeReplyObject(reply[i]);
+    //freeReplyObject(reply[i]);
 
     return len;
 }
@@ -166,7 +170,8 @@ offset_t cinquainAppend(const char *key, const int key_length,
 
 int cinquainIncrease(const char *key, const int key_length) {
     int i = key[0] % redisServerNum, ret;
-    reply[i] = redisCommand(c[i], "INCR %s%c", key, 0x00);
+    char refk = 0x00;
+    reply[i] = redisCommand(c[i], "INCR %b%b", key, key_length, &refk, 1);
     ret = reply[i]->integer;
 
     // reconnect redis server as error occurs
@@ -178,7 +183,8 @@ int cinquainIncrease(const char *key, const int key_length) {
 
 int cinquainDecrease(const char *key, const int key_length) {
     int i = key[0] % redisServerNum, ret;
-    reply[i] = redisCommand(c[i], "DECR %s%c", key, 0x00);
+    char refk = 0x00;
+    reply[i] = redisCommand(c[i], "DECR %b%b", key, key_length, &refk, 1);
     ret = reply[i]->integer;
 
     // reconnect redis server as error occurs
@@ -190,18 +196,22 @@ int cinquainDecrease(const char *key, const int key_length) {
 
 int CinquainRemove(const char *key, const int key_length) {
     int i = key[0] % redisServerNum;
-    int blockNum, replyNum;
-    reply[i] = redisCommand(c[i], "GET %s%c", key, 0xff);
+    char blockNum, replyNum;
+    char refk = 0x00;
+    char ff = 0xff;
+    reply[i] = redisCommand(c[i], "GET %b%b", key, key_length, &ff, 1);
     blockNum = reply[i]->type!=REDIS_REPLY_ERROR ? reply[i]->integer : 0;
     replyNum = blockNum + 2;
     freeReplyObject(reply[i]);
-    while (blockNum > 0)
-        redisAppendCommand(c[i], "DEL %s%c", key, blockNum--);
-    redisAppendCommand(c[i], "DEL %s%c", key, 0xff);
-    redisAppendCommand(c[i], "DEL %s%c", key, 0x00);
+    while (blockNum > 0) {
+        redisAppendCommand(c[i], "DEL %b%b", key, key_length, &blockNum, 1);
+        blockNum--;
+    }
+    redisAppendCommand(c[i], "DEL %b%b", key, key_length, &ff, 1);
+    redisAppendCommand(c[i], "DEL %b%b", key, key_length, &refk, 1);
 
     while (replyNum-- > 0) {
-        redisGetReply(c[i], &reply[i]);
+        redisGetReply(c[i], (void **)&reply[i]);
         if (reply[i]->type == REDIS_REPLY_ERROR)
             break;
         freeReplyObject(reply[i]);

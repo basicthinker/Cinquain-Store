@@ -112,6 +112,6 @@ int cinquainDecrease(const char *key, const int key_length);
 // Multiple values include its reference count, and physical blocks of
 // a large logic value.
 // return 0 for success & other values fail
-int CinquainRemove(const char *key, const int key_length);
+int cinquainRemove(const char *key, const int key_length);
 
 #endif // CINQUAIN_STORE_H_

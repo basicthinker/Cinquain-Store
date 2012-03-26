@@ -48,7 +48,7 @@ for i in ${range[@]}; do
             line=$((line+1))
             for((k=0; k<j; k++))
             do
-                ./store_test redis_server.config $1 $i $2 1>>$log &
+                ./store_test $3 $1 $i $2 1>>$log &
             done
             line=$((line+j))
             cline=`cat $log |wc -l`

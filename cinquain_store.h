@@ -26,7 +26,26 @@
 #ifndef CINQUAIN_STORE_H_
 #define CINQUAIN_STORE_H_
 
+// error flags 
+#define CINQUAIN_ERR_CONFIG -6
+#define CINQUAIN_ERR_CONNECTION -7
+#define CINQUAIN_ERR_RANGE -8
+#define CINQUAIN_ERR_NX -9
+#define CINQUAIN_ERR_REPLY -10
+
 typedef unsigned int offset_t;
+
+typedef struct {
+    unsigned char id;
+    offset_t offset;
+    offset_t length;
+    char * buffer;
+} work_block;
+
+typedef struct {
+    work_block *wb;
+    unsigned char blocks;
+} work_blocks;
 
 // Macro Utility.
 // Retrieves the address of host structure.
@@ -113,5 +132,13 @@ int cinquainDecrease(const char *key, const int key_length);
 // a large logic value.
 // return 0 for success & other values fail
 int cinquainRemove(const char *key, const int key_length);
+
+//return the length of the string vaule stored at the key.
+//return 0 if key does not exist.
+int cinquainStrlen(const char *key, const int key_length);
+
+//return the error number.
+//return 0 if no errors.
+int cinquainGetErr();
 
 #endif // CINQUAIN_STORE_H_

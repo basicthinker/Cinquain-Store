@@ -30,11 +30,11 @@ declare -a clients_num
 
 range[0]=4
 range[1]=32
-range[2]=256
-range[3]=1024
+range[2]=64
+range[3]=256
 clients_num[0]=1
-clients_num[1]=5
-clients_num[2]=10
+clients_num[1]=10
+clients_num[2]=100
 
 #save log for current executing
 log=$(date '+%Y-%m-%d_%H:%M:%S').$1.$2.log
@@ -48,7 +48,7 @@ for i in ${range[@]}; do
             line=$((line+1))
             for((k=0; k<j; k++))
             do
-                ./store_test $3 $1 $i $2 1>>$log &
+                ./store_test $1 $i $2>>$log &
             done
             line=$((line+j))
             cline=`cat $log |wc -l`

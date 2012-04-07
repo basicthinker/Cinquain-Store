@@ -4,6 +4,3 @@ Nowadays, there are already many mature key-value stores. But traditional key-va
 
 We use Redis (http://redis.io/) as the back store.
 
-You can use this command :
-gcc -o store_test cinquain_store_redis.c store_test.c -lhiredis -g -D_FILE_OFFSET_BITS=64
-make store_test

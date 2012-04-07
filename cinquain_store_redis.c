@@ -46,6 +46,8 @@ static int redisServerNum = 0;
 static char numks = 0xff;
 static char refks = 0x00;
 
+static struct timeval timeout = { 1, 500000 }; // 1.5 seconds
+
 //record the error number & error message
 int errorNo = 0;
 char errorMsg[64];
@@ -69,9 +71,11 @@ int cinquainInitBackStore(const int argc, const char *argv[]) {
         while(!feof(fp)) {
             fscanf(fp, "%s %d\n", ip, &port);
             if (port < 0)
-                c[i] = redisConnectUnix(ip);
+                //c[i] = redisConnectUnix(ip);
+                c[i] = redisConnectUnixWithTimeout(ip, timeout);
             else
-                c[i] = redisConnect(ip, port);
+                //c[i] = redisConnect(ip, port);
+                c[i] = redisConnectWithTimeout(ip, port, timeout);
             if (!c[i]->err) {
                 redisIp[i] = malloc(sizeof(char) * (strlen(ip) + 1 ));
                 strcpy(redisIp[i], ip);
@@ -126,8 +130,17 @@ int cinquainWriteRange(const char *key, const int key_length,
     int hasWritten = 0;
     work_blocks wbs = {NULL, 0};
     cinquainSetWorkBlocks(&wbs, offset, value_length, value);
-    unsigned char blockNum = wbs.blocks;
+    unsigned char blockNum = wbs.wb[wbs.blocks-1].id; 
     work_block wb = {numks, 0, 1, &blockNum};
+    /*
+    redisReply *r = NULL;
+    r = cinquainReadBlock(key, key_length, &wb);
+    unsigned char oldBlockNum = r ? r->str[0] : 0;
+    if (r)
+        freeReplyObject(r);
+
+    wb.buffer = oldBlockNum > blockNum ? &oldBlockNum : &blockNum;
+    */
     int tNo;
     if (wbs.wb) {
         while (wbs.blocks--) {
@@ -137,11 +150,11 @@ int cinquainWriteRange(const char *key, const int key_length,
         }
         //roll back...
         if (errorNo) {
-            tNo = errorNo;
-            while (wbs.blocks++<blockNum && cinquainDeleteBlock(key, key_length, &wbs.wb[wbs.blocks]));
-            errorNo = errorNo ? errorNo : tNo;
+            //tNo = errorNo;
+            //while (wbs.blocks++<blockNum && cinquainDeleteBlock(key, key_length, &wbs.wb[wbs.blocks]));
+            //errorNo = errorNo ? errorNo : tNo;
         }
-        else
+        else //if(cinquainStrlen(key, key_length) == offset + value_length)
             cinquainWriteBlock(key, key_length, &wb);
         free(wbs.wb);
     }
@@ -223,6 +236,7 @@ static int cinquainWriteBlock(const char *key, const int key_length, work_block 
     redisReply * r = NULL;
     if (c){
         r = redisCommand(c, "SETRANGE %b%b %u %b", key, key_length, &wb->id, 1, wb->offset, wb->buffer, wb->length);
+        //r = redisCommand(c, "SETRANGE foo 0 bar");
         if (!r || r->type!=REDIS_REPLY_INTEGER || r->integer!=wb->offset+wb->length)
             cinquainErrLog(c, r);
         if (r)
@@ -287,15 +301,18 @@ static redisContext *cinquainGetContext(const char *key, const int key_length){
     //map the key to a server & make sure the connection not error, 'i' is the server index
     int i = key[0] % redisServerNum;
     if (!c[i] || c[i]->err) {
+        //sleep(5);
         if (c[i] && c[i]->err)
             redisFree(c[i]);
         if (redisPort[i] < 0)
-            c[i] = redisConnectUnix(redisIp[i]);
+            //c[i] = redisConnectUnix(redisIp[i]);
+            c[i] = redisConnectUnixWithTimeout(redisIp[i], timeout);
         else
-            c[i] = redisConnect(redisIp[i], redisPort[i]);
+            //c[i] = redisConnect(redisIp[i], redisPort[i]);
+            c[i] = redisConnectWithTimeout(redisIp[i], redisPort[i], timeout);
     }
 
-    if (!c[i]->err)
+    if (c[i] && !c[i]->err)
         return c[i];
     else {
         cinquainErrLog(c[i], NULL);
@@ -337,6 +354,7 @@ static int cinquainErrLog(redisContext *c, redisReply *r) {
 }
 
 int cinquainGetErr(){
-    printf("%d : %s\n", errorNo, errorMsg);
+    if (errorNo)
+        printf("%d : %s\n", errorNo, errorMsg);
     return errorNo;
 }

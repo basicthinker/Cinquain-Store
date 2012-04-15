@@ -97,7 +97,8 @@ int cinquainInitBackStore(const int argc, const char *argv[]) {
 }
 
 char **cinquainReadRange(const char *key, const int key_length,
-                         const offset_t offset, const offset_t length) {
+                         const offset_t offset, const offset_t length,
+                         const offset_t file_size) {
 
     redisReply *r = NULL;
     workBlocks wbs = {NULL, 0};
@@ -128,7 +129,8 @@ int cinquainDeleteBufferHost(const char **value) {
 
 int cinquainWriteRange(const char *key, const int key_length,
                        offset_t offset,
-                       const char *value, const offset_t value_length) {
+                       const char *value, const offset_t value_length,
+                       const offset_t file_size) {
     int hasWritten = 0;
     workBlocks wbs = {NULL, 0};
     cinquainSetWorkBlocks(&wbs, offset, value_length, value);
@@ -165,10 +167,12 @@ int cinquainWriteRange(const char *key, const int key_length,
 
 offset_t cinquainAppend(const char *key, const int key_length,
                         const char *value, const offset_t value_length,
-                        offset_t current_length) {
+                        const offset_t current_length,
+                        const offset_t file_size) {
     int len = cinquainStrlen(key, key_length);
     len = len < 0 ? 0 : len;
-    int hasWritten = cinquainWriteRange(key, key_length, len, value, value_length);
+    int hasWritten = cinquainWriteRange(key, key_length, len,
+                                        value, value_length, file_size);
     return hasWritten > 0 ? hasWritten + len : hasWritten;
 }
 
@@ -212,7 +216,8 @@ int cinquainStrlen(const char *key, const int key_length) {
     return errorNo ? errorNo : (wb.id-1) * BLOCK_SIZE + len;
 }
 
-static redisReply *cinquainReadBlock(const char *key, const int key_length, workBlock *wb){
+static redisReply *cinquainReadBlock(const char *key, const int key_length,
+                                     workBlock *wb){
 
     redisContext *c = cinquainGetContext(key, key_length);
     redisReply *r = NULL;
@@ -232,12 +237,14 @@ static redisReply *cinquainReadBlock(const char *key, const int key_length, work
     return r;
 }
 
-static int cinquainWriteBlock(const char *key, const int key_length, workBlock *wb){
+static int cinquainWriteBlock(const char *key, const int key_length,
+                              workBlock *wb){
 
     redisContext * c = cinquainGetContext(key, key_length);
     redisReply * r = NULL;
     if (c){
-        r = redisCommand(c, "SETRANGE %b%b %u %b", key, key_length, &wb->id, 1, wb->offset, wb->buffer, wb->length);
+        r = redisCommand(c, "SETRANGE %b%b %u %b", key, key_length,
+                         &wb->id, 1, wb->offset, wb->buffer, wb->length);
         //r = redisCommand(c, "SETRANGE foo 0 bar");
         if (!r || r->type!=REDIS_REPLY_INTEGER || r->integer!=wb->offset+wb->length)
             cinquainErrLog(c, r);
@@ -247,7 +254,8 @@ static int cinquainWriteBlock(const char *key, const int key_length, workBlock *
     return errorNo ? 0 : wb->length;
 }
 
-static int cinquainStrlenBlock(const char *key, const int key_length, workBlock *wb){
+static int cinquainStrlenBlock(const char *key, const int key_length,
+                               workBlock *wb){
 
     redisContext * c = cinquainGetContext(key, key_length);
     redisReply * r = NULL;
@@ -264,7 +272,8 @@ static int cinquainStrlenBlock(const char *key, const int key_length, workBlock 
     return errorNo ? errorNo : len;
 }
 
-static int cinquainDeleteBlock(const char *key, const int key_length, workBlock *wb){
+static int cinquainDeleteBlock(const char *key, const int key_length,
+                               workBlock *wb){
 
     redisContext *c = cinquainGetContext(key, key_length);
     redisReply *r = NULL;
@@ -278,8 +287,8 @@ static int cinquainDeleteBlock(const char *key, const int key_length, workBlock 
     return errorNo ? 0 : 1;
 }
 
-static int cinquainIncreaseBy(const char *key, const int key_length, int increment){
-
+static int cinquainIncreaseBy(const char *key, const int key_length,
+                              int increment){
     redisContext *c = cinquainGetContext(key, key_length);
     redisReply *r = NULL;
     int val = 0;
@@ -335,7 +344,9 @@ static workBlocks *cinquainSetWorkBlocks(workBlocks *wbs, offset_t offset, offse
     wbs->wb = (workBlock *)malloc(sizeof(workBlock)*wbs->blocks);
     char *buffer, *cur;
 
-    cur = buffer = (char *)(value ? value : (wbs->blocks > 1 ? (char *)malloc(sizeof(char)*length) : NULL));
+    cur = buffer = (char *)(value ? 
+                            value : (wbs->blocks > 1 ?
+                                     (char *)malloc(sizeof(char)*length) : NULL));
 
     while (startBlock <= endBlock) {
         wbs->wb[i].id = startBlock++;
@@ -350,12 +361,13 @@ static workBlocks *cinquainSetWorkBlocks(workBlocks *wbs, offset_t offset, offse
 }
 
 static int cinquainErrLog(redisContext *c, redisReply *r) {
-    errorNo = (!r) ? -c->err : ((r->type==REDIS_REPLY_STRING && r->len==0) ? CINQUAIN_ERR_NX : CINQUAIN_ERR_REPLY);
+    errorNo = (!r) ? -c->err : ((r->type==REDIS_REPLY_STRING && r->len==0) ?
+                                CINQUAIN_ERR_NX : CINQUAIN_ERR_REPLY);
     (r && r->type==REDIS_REPLY_ERROR) ? (errorMsg[r->len]='\0',memcpy(errorMsg, r->str, r->len)) : strcpy(errorMsg, c->errstr);
     return errorNo;
 }
 
-int cinquainGetErr(){
+int cinquainGetErr() {
     if (errorNo)
         printf("%d : %s\n", errorNo, errorMsg);
     return errorNo;

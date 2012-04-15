@@ -34,10 +34,10 @@ range[2]=64
 range[3]=256
 clients_num[0]=1
 clients_num[1]=10
-clients_num[2]=100
+#clients_num[2]=100
 
 #save log for current executing
-log=$(date '+%Y-%m-%d_%H:%M:%S').$1.$2.log
+log=$(date '+%Y-%m-%d_%H:%M:%S').$2.log
 
 line=0
 cline=0

@@ -39,16 +39,19 @@
 
 void function_test();
 double read_test(offset_t range, int n);
-double write_test(offset_t range, char *buffer, int n);
+double write_test(offset_t range, int n);
 int str_cmp(const char *src, const char *dest, int len);
-long long fill_data(char *buffer);
+long long fill_data();
 int bSearch(int *a, int n, int key);
 void isort(double *a, int n);
 void swap(double *a, double *b);
+int fill_buffer(char *filename, char *buffer, int size);
 
 //file size(2^i bytes) histogram with total 10000  
 long long filesizeHist[28] = {50, 20, 15, 10, 100, 100, 150, 200, 400, 600, 1100, 1250, 1100, 1000, 900, 800, 700, 500, 300, 250, 150, 100, 75, 60, 25, 20, 15, 10};
-long long total = 1; //unit : 10000
+long long total = 8;
+int unit = 9795;
+int pi = 22;
 int b[29] = {0};
 
 int main (int argc, const char *argv[])
@@ -63,7 +66,7 @@ int main (int argc, const char *argv[])
         return; 
 
     int i, n;
-    double rtime[16], wtime[16];
+    double r[16], w[16];
     for (i=1; i<29; i++)
         b[i] = b[i-1] + filesizeHist[i-1] * total;
 
@@ -72,23 +75,23 @@ int main (int argc, const char *argv[])
     sscanf(argv[3], "%d", &n);
     range *= 1024; //KB
 
-    FILE *fp = fopen("largefile", "rb");
-    char *buffer = malloc(sizeof(char)*128*M);
-    if(fp) {
-        fread(buffer, sizeof(char), 128*M, fp);
-        fclose(fp);
-    }
+    //printf("%lld\n", cinquainUsedMemoryRss());
+    //fill_data();
 
-    fill_data(buffer);
-
+    //printf("%lf\n", read_test(range, 1000));
+    printf("%lf\n", write_test(range, 1000)/M);
     // test ...
     /*
-    for (i=0 ; i<n; i++)
-        rtime[i] = read_test(range, 10000);
-    for (i=0 ; i<n; i++)
-        wtime[i] = write_test(range, buffer, 10000);
-    isort(rtime, n);
-    isort(wtime, n);
+    for (i=0 ; i<n; i++) {
+        r[i] = read_test(range, 1000) / M;
+        sleep(5);
+    }
+    for (i=0 ; i<n; i++) {
+        w[i] = write_test(range, buffer, 1000) / M;
+        sleep(5);
+    }
+    isort(r, n);
+    isort(w, n);
     for (i=0; i<n; i++)
         printf("%lf\t", rtime[i]);
     printf("|\t");
@@ -99,29 +102,43 @@ int main (int argc, const char *argv[])
 
     //function_test();
 
-    free(buffer);
-
     return 0;
 }
 
-long long fill_data(char *buffer)
+long long fill_data()
 {
-    long long key = total*10000 - 1;
-    long long storage = 0, hasWritten = 0;
-    int i, j, n;
-    for (i=27; i>=0; i--){
+    long long key = 0;
+    long long storage = 0, hasWritten = 0, t = 1, usedMemoryRss, temp=0;
+    int i, j, n, times;
+    char *buffer = malloc(sizeof(char)*4*M);
+    if (fill_buffer("largefile", buffer, 4*M))
+        return -1;
+    for (i=0; i<pi; i++){
         n = total*filesizeHist[i];
         for (j=0; j<n; j++) {
+            if (i>19)
+                sleep(1);
             hasWritten += cinquainWriteRange((char *)(&key), sizeof(key), 0, buffer, 1<<i);
-            while (cinquainGetErr()) {
-                sleep(10);
-                printf("%lld\n", key);
-                hasWritten += cinquainWriteRange((char *)(&key), sizeof(key), 0, buffer, 1<<i);
+            if (hasWritten > t*G) {
+                times = 0;
+                temp = usedMemoryRss = cinquainUsedMemoryRss();
+                while (usedMemoryRss > 512*M && times < 15) {
+                    sleep(10);
+                    usedMemoryRss = cinquainUsedMemoryRss();
+                    printf("Used Memory Rss : %lld Redis Swap Speed : %lld\n", usedMemoryRss, (usedMemoryRss - temp)/10);
+                    temp = usedMemoryRss;
+                    times++;
+                }
+                t++;
             }
-            key--;
+            
+            key++;
         }
         storage += total*filesizeHist[i]*(1<<i);
     }
+
+    free(buffer);
+
     printf("fill data size : %lld bytes -- %lf G\nreal written : %lld\nkeys : %lld\n", storage, (double)storage/G, hasWritten, key);
     return hasWritten == storage;
 }
@@ -129,37 +146,51 @@ long long fill_data(char *buffer)
 double read_test(offset_t range, int n)
 {
     int i;
-    long long key = 0;
+    long long key = 0, hasRead = 0, ftime = 0;
     offset_t offset, size;
     const char **r;
-    struct timeval start, end;
+    struct timeval start, end, fstart, fend;
     srand(time(0));
 
     gettimeofday(&start, NULL);
     //read n random keys ...
     for (i=0; i<n; i++) {
         offset = 0;
-        key = (double)rand()*total*10000/RAND_MAX;
-        size = 1<<bSearch(b, 28, key);
+        key = rand()*total*unit/RAND_MAX;
+        size = 1<<bSearch(b, pi, key);
+        //printf("%lld %d\n", key, size);
         while (offset < size) {
-            //r = (const char **)cinquainReadRange((char *)(&key), sizeof(key), offset, range);
-            //cinquainDeleteBufferHost(r);
+            gettimeofday(&fstart, NULL);
+            r = (const char **)cinquainReadRange((char *)(&key), sizeof(key), offset, range);
+            gettimeofday(&fend, NULL);
+            ftime += ((fend.tv_sec-fstart.tv_sec)*1000000 + fend.tv_usec - fstart.tv_usec);
+            
+            if (r)
+                hasRead += range;
+            cinquainDeleteBufferHost(r);
             offset += range;
         }
     }
 
     gettimeofday(&end, NULL);
 
-    return ((end.tv_sec-start.tv_sec)*1000000 + end.tv_usec - start.tv_usec)/1000000;
+    //return hasRead*1000000/((end.tv_sec-start.tv_sec)*1000000 + end.tv_usec - start.tv_usec);
+    return hasRead*1000000/ftime;
 }
 
-double write_test(offset_t range, char *buffer, int n)
+double write_test(offset_t range, int n)
 {
     int i;
-    long long key = 0;
+    long long key = 0, hasWritten = 0, ftime = 0;
     offset_t offset, size, count;
     char *cur;
-    struct timeval start, end;
+    struct timeval start, end, fstart, fend;
+    
+    int bufferSize = 128*M;
+    //char buffer[256*K];
+    char *buffer = malloc(sizeof(char)*bufferSize);
+    if (fill_buffer("largefile", buffer, bufferSize) != 0)
+        return -1;
     srand(time(0));
 
     gettimeofday(&start, NULL);
@@ -167,19 +198,27 @@ double write_test(offset_t range, char *buffer, int n)
     //write ...
     for (i=0; i<n; i++) {
         offset = 0;
-        key = (double)rand()*total*10000/RAND_MAX;
-        size = 1<<bSearch(b, 28, key);
+        key = rand()*total*unit/RAND_MAX;
+        size = 1<<bSearch(b, pi, key);
+        //printf("%lld %d\n", key, size);
         while (offset < size) {
             count = size - offset > range ? range : size - offset;
-            //cinquainWriteRange((char *)(&key), sizeof(key), offset, cur, count);
+            gettimeofday(&fstart, NULL);
+            hasWritten += cinquainWriteRange((char *)(&key), sizeof(key), offset, buffer+(offset%bufferSize), count);
+            gettimeofday(&fend, NULL);
+            ftime += ((fend.tv_sec-fstart.tv_sec)*1000000 + fend.tv_usec - fstart.tv_usec);
+            //cinquainGetErr();
             offset += count;
-            cur += count;
+            //cur += count;
         }
     }
 
     gettimeofday(&end, NULL);
 
-    return ((end.tv_sec-start.tv_sec)*1000000 + end.tv_usec - start.tv_usec)/1000000;
+    free(buffer);
+
+    return hasWritten*1000000/((end.tv_sec-start.tv_sec)*1000000 + end.tv_usec - start.tv_usec);
+    //return hasWritten*1000000/ftime;
 }
 void function_test()
 {
@@ -257,4 +296,18 @@ void swap(double *a, double *b) {
     *a = *b;
     *b = t;
     return ;
+}
+
+int fill_buffer(char *filename, char *buffer, int size)
+{
+    FILE *fp = fopen(filename, "rb");
+    if(fp) {
+        fread(buffer, sizeof(char), size, fp);
+        fclose(fp);
+        return 0;
+    }
+    else {
+        free(buffer);
+        return -1;
+    }
 }

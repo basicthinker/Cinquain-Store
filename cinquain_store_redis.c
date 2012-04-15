@@ -26,7 +26,8 @@
 
 // const varibles
 // in bytes
-#define BLOCK_SIZE (512*1024*1024) 
+//#define BLOCK_SIZE (512*1024*1024) 
+#define BLOCK_SIZE (128*1024*1024) 
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -43,8 +44,11 @@ static int redisPort[256];
 static int redisServerNum = 0;
 
 // refks is a key suffix to record reference & numks is a key suffix to record block number
-static char numks = 0xff;
-static char refks = 0x00;
+static unsigned int numks = 0xffffffff;
+static unsigned int  refks = 0x00000000;
+
+// key extend part length ...
+static unsigned int keyExLength = sizeof(unsigned int);
 
 static struct timeval timeout = { 1, 500000 }; // 1.5 seconds
 
@@ -130,8 +134,8 @@ int cinquainWriteRange(const char *key, const int key_length,
     int hasWritten = 0;
     work_blocks wbs = {NULL, 0};
     cinquainSetWorkBlocks(&wbs, offset, value_length, value);
-    unsigned char blockNum = wbs.wb[wbs.blocks-1].id; 
-    work_block wb = {numks, 0, 1, &blockNum};
+    unsigned int blockNum = wbs.wb[wbs.blocks-1].id; 
+    work_block wb = {numks, 0, keyExLength, (char *)&blockNum};
     /*
     redisReply *r = NULL;
     r = cinquainReadBlock(key, key_length, &wb);
@@ -179,10 +183,10 @@ int cinquainDecrease(const char *key, const int key_length) {
 }
 
 int cinquainRemove(const char *key, const int key_length) {
-    work_block wb = {numks, 0, 1, NULL};
+    work_block wb = {numks, 0, keyExLength, NULL};
     redisReply *r = cinquainReadBlock(key, key_length, &wb);
     if (r) {
-        unsigned char blockNum = r->str[0];
+        unsigned int blockNum = *((unsigned int *)r->str);
         freeReplyObject(r);
         if (!cinquainDeleteBlock(key, key_length, &wb))
             return errorNo;
@@ -199,15 +203,44 @@ int cinquainRemove(const char *key, const int key_length) {
 }
 
 int cinquainStrlen(const char *key, const int key_length) {
-    work_block wb = {numks, 0, 1, NULL};
+    work_block wb = {numks, 0, keyExLength, NULL};
     redisReply *r = cinquainReadBlock(key, key_length, &wb);
     int len = 0;
     if (r) {
-        wb.id = r->str[0];
+        wb.id = *((unsigned int *)r->str);
         freeReplyObject(r);
         len = cinquainStrlenBlock(key, key_length, &wb);
     }
     return errorNo ? errorNo : (wb.id-1) * BLOCK_SIZE + len;
+}
+
+long long cinquainUsedMemoryRss()
+{
+    int i = 0, j = 0, col = 21;
+    long long usedMemoryRss = 0, m = 0;
+    char buf[64], *str=NULL;
+    redisReply *r = NULL;
+    for (i=0; i<redisServerNum; i++) {
+        if (c[i]) {
+            r = redisCommand(c[i], "INFO");
+	    if (r && r->type==REDIS_REPLY_STRING && r->len>0) {
+                str = r->str;
+                for (j=0; j<col; j++) {
+                    sscanf(str, "%s", buf);
+                    str += strlen(buf) + 2;  //\r\n
+                }
+                sscanf(str, "used_memory_rss:%lld", &m);
+                usedMemoryRss += m;
+            }
+            else
+                break;
+            if (r)
+                freeReplyObject(r);
+        }
+    }
+    if (errorNo && r)
+        freeReplyObject(r);
+    return errorNo ? errorNo : usedMemoryRss;
 }
 
 static redisReply *cinquainReadBlock(const char *key, const int key_length, work_block *wb){
@@ -215,7 +248,7 @@ static redisReply *cinquainReadBlock(const char *key, const int key_length, work
     redisContext *c = cinquainGetContext(key, key_length);
     redisReply *r = NULL;
     if (c) {
-        r = redisCommand(c, "GETRANGE %b%b %u %u", key, key_length, &wb->id, 1, wb->offset, wb->offset+wb->length-1);
+        r = redisCommand(c, "GETRANGE %b%b %u %u", key, key_length, &wb->id, keyExLength, wb->offset, wb->offset+wb->length-1);
 	if (r && r->type==REDIS_REPLY_STRING && r->len>0) {
             if (wb->buffer)
                 memcpy(wb->buffer, r->str, r->len);
@@ -235,7 +268,7 @@ static int cinquainWriteBlock(const char *key, const int key_length, work_block 
     redisContext * c = cinquainGetContext(key, key_length);
     redisReply * r = NULL;
     if (c){
-        r = redisCommand(c, "SETRANGE %b%b %u %b", key, key_length, &wb->id, 1, wb->offset, wb->buffer, wb->length);
+        r = redisCommand(c, "SETRANGE %b%b %u %b", key, key_length, &wb->id, keyExLength, wb->offset, wb->buffer, wb->length);
         //r = redisCommand(c, "SETRANGE foo 0 bar");
         if (!r || r->type!=REDIS_REPLY_INTEGER || r->integer!=wb->offset+wb->length)
             cinquainErrLog(c, r);
@@ -251,7 +284,7 @@ static int cinquainStrlenBlock(const char *key, const int key_length, work_block
     redisReply * r = NULL;
     int len = 0;
     if (c){
-        r = redisCommand(c, "STRLEN %b%b", key, key_length, &wb->id, 1);
+        r = redisCommand(c, "STRLEN %b%b", key, key_length, &wb->id, keyExLength);
         if (!r || r->type!=REDIS_REPLY_INTEGER)
             cinquainErrLog(c, r);
         else
@@ -267,7 +300,7 @@ static int cinquainDeleteBlock(const char *key, const int key_length, work_block
     redisContext *c = cinquainGetContext(key, key_length);
     redisReply *r = NULL;
     if (c) {
-        r = redisCommand(c, "DEL %b%b", key, key_length, &wb->id, 1);
+        r = redisCommand(c, "DEL %b%b", key, key_length, &wb->id, keyExLength);
 	if (!r || r->type!=REDIS_REPLY_INTEGER || r->integer!=1)
             cinquainErrLog(c, r);
         if (r)
@@ -282,7 +315,7 @@ static int cinquainIncreaseBy(const char *key, const int key_length, int increme
     redisReply *r = NULL;
     int val = 0;
     if (c) {
-        r = increment > 0 ? redisCommand(c, "INCRBY %b%b %u", key, key_length, &refks, 1, increment) : redisCommand(c, "DECRBY %b%b %u", key, key_length, &refks, 1, -increment);
+        r = increment > 0 ? redisCommand(c, "INCRBY %b%b %u", key, key_length, &refks, keyExLength, increment) : redisCommand(c, "DECRBY %b%b %u", key, key_length, &refks, keyExLength, -increment);
         if (r && r->type==REDIS_REPLY_INTEGER)
             val = r->integer;
         else
@@ -299,17 +332,16 @@ static redisContext *cinquainGetContext(const char *key, const int key_length){
     errorNo = 0;
     errorMsg[0] = '\0';
     //map the key to a server & make sure the connection not error, 'i' is the server index
-    int i = key[0] % redisServerNum;
+    int i = (*(long long *)key) % redisServerNum;
     if (!c[i] || c[i]->err) {
-        //sleep(5);
         if (c[i] && c[i]->err)
             redisFree(c[i]);
         if (redisPort[i] < 0)
-            //c[i] = redisConnectUnix(redisIp[i]);
-            c[i] = redisConnectUnixWithTimeout(redisIp[i], timeout);
+            c[i] = redisConnectUnix(redisIp[i]);
+            //c[i] = redisConnectUnixWithTimeout(redisIp[i], timeout);
         else
-            //c[i] = redisConnect(redisIp[i], redisPort[i]);
-            c[i] = redisConnectWithTimeout(redisIp[i], redisPort[i], timeout);
+            c[i] = redisConnect(redisIp[i], redisPort[i]);
+            //c[i] = redisConnectWithTimeout(redisIp[i], redisPort[i], timeout);
     }
 
     if (c[i] && !c[i]->err)
@@ -326,8 +358,8 @@ static work_blocks *cinquainSetWorkBlocks(work_blocks *wbs, offset_t offset, off
         errorNo = CINQUAIN_ERR_RANGE;
         return wbs;
     }
-    unsigned char startBlock = offset / BLOCK_SIZE + 1;
-    unsigned char endBlock = (offset + length - 1) / BLOCK_SIZE + 1;
+    unsigned int startBlock = offset / BLOCK_SIZE + 1;
+    unsigned int endBlock = (offset + length - 1) / BLOCK_SIZE + 1;
     wbs->blocks = endBlock - startBlock + 1;
     int i = 0;
     wbs->wb = (work_block *)malloc(sizeof(work_block)*wbs->blocks);

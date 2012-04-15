@@ -36,7 +36,7 @@
 typedef unsigned int offset_t;
 
 typedef struct {
-    unsigned char id;
+    unsigned int id;
     offset_t offset;
     offset_t length;
     char * buffer;
@@ -44,7 +44,7 @@ typedef struct {
 
 typedef struct {
     work_block *wb;
-    unsigned char blocks;
+    unsigned int blocks;
 } work_blocks;
 
 // Macro Utility.
@@ -140,5 +140,9 @@ int cinquainStrlen(const char *key, const int key_length);
 //return the error number.
 //return 0 if no errors.
 int cinquainGetErr();
+
+//return the memory redis servers used as OS seen in bytes.
+//return error number if has errors.
+long long cinquainUsedMemoryRss();
 
 #endif // CINQUAIN_STORE_H_

@@ -26,26 +26,7 @@
 #ifndef CINQUAIN_STORE_H_
 #define CINQUAIN_STORE_H_
 
-// error flags 
-#define CINQUAIN_ERR_CONFIG -6
-#define CINQUAIN_ERR_CONNECTION -7
-#define CINQUAIN_ERR_RANGE -8
-#define CINQUAIN_ERR_NX -9
-#define CINQUAIN_ERR_REPLY -10
-
 typedef unsigned int offset_t;
-
-typedef struct {
-    unsigned char id;
-    offset_t offset;
-    offset_t length;
-    char * buffer;
-} work_block;
-
-typedef struct {
-    work_block *wb;
-    unsigned char blocks;
-} work_blocks;
 
 // Macro Utility.
 // Retrieves the address of host structure.

@@ -20,8 +20,7 @@
 //  store_test.c
 //  Cinquain-Store
 //
-//  Created by Jinglei Ren <jinglei.ren@gmail.com> on 2/16/12.
-//  Modified by Weichao Guo <guoweichao2010@gmail.com>.
+//  Created by Weichao Guo <guoweichao2010@gmail.com> on 2/16/12.
 //
 
 #include <stdio.h>
@@ -32,6 +31,7 @@
 #include <unistd.h>
 
 #include "cinquain_store.h"
+#include "internal.h"
 
 #define K (1024)
 #define M (1024*1024)

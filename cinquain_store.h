@@ -26,26 +26,7 @@
 #ifndef CINQUAIN_STORE_H_
 #define CINQUAIN_STORE_H_
 
-// error flags 
-#define CINQUAIN_ERR_CONFIG -6
-#define CINQUAIN_ERR_CONNECTION -7
-#define CINQUAIN_ERR_RANGE -8
-#define CINQUAIN_ERR_NX -9
-#define CINQUAIN_ERR_REPLY -10
-
 typedef unsigned int offset_t;
-
-typedef struct {
-    unsigned int id;
-    offset_t offset;
-    offset_t length;
-    char * buffer;
-} work_block;
-
-typedef struct {
-    work_block *wb;
-    unsigned int blocks;
-} work_blocks;
 
 // Macro Utility.
 // Retrieves the address of host structure.
@@ -71,7 +52,8 @@ int cinquainInitBackStore(const int argc, const char *argv[]);
 // A null pointer is returned on error or if the requested length of data
 // cannot be fulfilled.
 char **cinquainReadRange(const char *key, const int key_length,
-                         const offset_t offset, const offset_t length);
+                         const offset_t offset, const offset_t length,
+                         const offset_t file_size);
 
 // Deconstructor of the host structure of
 // the buffer returned by cinquainReadRange. 
@@ -95,7 +77,8 @@ int cinquainDeleteBufferHost(const char **value);
 // Normally it should equal to value_length.
 int cinquainWriteRange(const char *key, const int key_length,
                        offset_t offset,
-                       const char *value, const offset_t value_length);
+                       const char *value, const offset_t value_length,
+                       const offset_t file_size);
 
 // Appends data to the value associated with the specified key.
 // Since this function is often used continuously, the parameter
@@ -109,13 +92,14 @@ int cinquainWriteRange(const char *key, const int key_length,
 //    while (current_length < total_length) {
 //      current_length = cinquainAppend(key, key_length, 
 //                                      value, value_length, 
-//                                      current_length);
+//                                      current_length, file_size);
 //      // Code to fill value buffer
 //    }
 //
 offset_t cinquainAppend(const char *key, const int key_length,
                         const char *value, const offset_t value_length,
-                        offset_t current_length);
+                        const offset_t current_length,
+                        const offset_t file_size);
 
 // Atomically increases the reference count (an integer value)
 // associated with the specified key.

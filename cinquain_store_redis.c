@@ -24,14 +24,18 @@
 //  Modified by Weichao Guo <guoweichao2010@gmail.com>.
 //
 
+
+#define _FILE_OFFSET_BITS 64
 // const varibles
 // in bytes
 //#define BLOCK_SIZE (512*1024*1024) 
-#define BLOCK_SIZE (128*1024*1024) 
+#define BLOCK_SIZE (8*1024*1024) 
+#define BIG_FILE_SIZE (16*1024*1024)
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "cinquain_store.h"
 #include "internal.h"
@@ -57,31 +61,58 @@ static struct timeval timeout = { 1, 500000 }; // 1.5 seconds
 //record the error number & error message
 int errorNo = 0;
 char errorMsg[64];
+
+//big file root path
+char bfileRootpath[256] = "./big_file/";
+int rootpathLen = 0;
+
+//big file read buffer point
+char *bfileBuffer;
+
 static redisContext *cinquainGetContext(const char *key, const int key_length);
 static workBlocks *cinquainSetWorkBlocks(workBlocks *wbs, offset_t offset, offset_t length, const char *value);
 static redisReply *cinquainReadBlock(const char *key, const int key_length, workBlock *wb);
 static int cinquainWriteBlock(const char *key, const int key_length, workBlock *wb);
+static int cinquainAppendBlock(const char *key, const int key_length, workBlock *wb);
 static int cinquainDeleteBlock(const char *key, const int key_length, workBlock *wb);
 static int cinquainStrlenBlock(const char *key, const int key_length, workBlock *wb);
 static int cinquainIncreaseBy(const char *key, const int key_length, int increment);
 static int cinquainErrLog(redisContext *c, redisReply *r);
+
+static char **bfileReadRange(const char *key, const int key_length,
+                         const offset_t offset, const offset_t length,
+                         const offset_t file_size);
+static int bfileWriteRange(const char *key, const int key_length,
+                       offset_t offset,
+                       const char *value, const offset_t value_length,
+                       const offset_t file_size);
+static offset_t bfileAppend(const char *key, const int key_length,
+                        const char *value, const offset_t value_length,
+                        const offset_t current_length,
+                        const offset_t file_size);
+static int bfileRemove(const char *key, const int key_length,
+                   const offset_t file_size);
+static char *bfilePath(const char *key, const int key_length); 
+
 
 int cinquainInitBackStore(const int argc, const char *argv[]) {
     
     char ip[64];
     int port, i=0;
 
+    //get root path length
+    rootpathLen = strlen(bfileRootpath);
     //read redis server config & get connections
     FILE *fp = fopen(argv[1], "r");
     if (fp != NULL) {
         while(!feof(fp)) {
             fscanf(fp, "%s %d\n", ip, &port);
             if (port < 0)
-                //c[i] = redisConnectUnix(ip);
-                c[i] = redisConnectUnixWithTimeout(ip, timeout);
+                c[i] = redisConnectUnix(ip);
+                //c[i] = redisConnectUnixWithTimeout(ip, timeout);
             else
-                //c[i] = redisConnect(ip, port);
-                c[i] = redisConnectWithTimeout(ip, port, timeout);
+                c[i] = redisConnect(ip, port);
+                //c[i] = redisConnectWithTimeout(ip, port, timeout);
             if (!c[i]->err) {
                 redisIp[i] = malloc(sizeof(char) * (strlen(ip) + 1 ));
                 strcpy(redisIp[i], ip);
@@ -104,6 +135,8 @@ char **cinquainReadRange(const char *key, const int key_length,
                          const offset_t offset, const offset_t length,
                          const offset_t file_size) {
 
+    if (file_size > BIG_FILE_SIZE)
+        return bfileReadRange(key, key_length, offset, length, file_size);
     redisReply *r = NULL;
     workBlocks wbs = {NULL, 0};
     cinquainSetWorkBlocks(&wbs, offset, length, NULL);
@@ -126,8 +159,12 @@ char **cinquainReadRange(const char *key, const int key_length,
     return r ? &r->str : NULL;
 }
 
-int cinquainDeleteBufferHost(const char **value) {
-    freeReplyObject(cinquainBufferHost(value, redisReply, str));
+int cinquainDeleteBufferHost(const char **value, const offset_t file_size) {
+
+    if (file_size > BIG_FILE_SIZE)
+        free((char *)(*value));
+    else
+        freeReplyObject(cinquainBufferHost(value, redisReply, str));
     return 0;
 }
 
@@ -135,21 +172,17 @@ int cinquainWriteRange(const char *key, const int key_length,
                        offset_t offset,
                        const char *value, const offset_t value_length,
                        const offset_t file_size) {
-    int hasWritten = 0;
+
+    if (file_size > BIG_FILE_SIZE)
+        return bfileWriteRange(key, key_length, offset, value, value_length, file_size);
+    int hasWritten = 0, tErrorNo;
     workBlocks wbs = {NULL, 0};
     cinquainSetWorkBlocks(&wbs, offset, value_length, value);
     unsigned int blockNum = wbs.wb[wbs.blocks-1].id; 
-    workBlock wb = {numks, 0, keyExLength, (char *)&blockNum};
-    /*
+    workBlock wb = {numks, 0, keyExLength, NULL};
     redisReply *r = NULL;
-    r = cinquainReadBlock(key, key_length, &wb);
-    unsigned char oldBlockNum = r ? r->str[0] : 0;
-    if (r)
-        freeReplyObject(r);
-
-    wb.buffer = oldBlockNum > blockNum ? &oldBlockNum : &blockNum;
-    */
-    int tNo;
+    unsigned int oldBlockNum = 0;
+    
     if (wbs.wb) {
         while (wbs.blocks--) {
             hasWritten += cinquainWriteBlock(key, key_length, &wbs.wb[wbs.blocks]);
@@ -158,12 +191,21 @@ int cinquainWriteRange(const char *key, const int key_length,
         }
         //roll back...
         if (errorNo) {
-            //tNo = errorNo;
-            //while (wbs.blocks++<blockNum && cinquainDeleteBlock(key, key_length, &wbs.wb[wbs.blocks]));
-            //errorNo = errorNo ? errorNo : tNo;
+            tErrorNo = errorNo;
+            while (wbs.blocks++<blockNum && cinquainDeleteBlock(key, key_length, &wbs.wb[wbs.blocks]));
+            errorNo = tErrorNo; //errorNo ? errorNo : tErrorNo;
         }
-        else //if(cinquainStrlen(key, key_length) == offset + value_length)
-            cinquainWriteBlock(key, key_length, &wb);
+        else {
+            r = cinquainReadBlock(key, key_length, &wb);
+            if (r) {
+                oldBlockNum = *((unsigned int *)r->str);
+            //    freeReplyObject(r);
+            }
+            if (oldBlockNum < blockNum) {
+                wb.buffer = (char *)&blockNum;
+                cinquainWriteBlock(key, key_length, &wb);
+            }
+        }
         free(wbs.wb);
     }
     return !errorNo ? hasWritten : errorNo;
@@ -173,11 +215,32 @@ offset_t cinquainAppend(const char *key, const int key_length,
                         const char *value, const offset_t value_length,
                         const offset_t current_length,
                         const offset_t file_size) {
-    int len = cinquainStrlen(key, key_length);
-    len = len < 0 ? 0 : len;
-    int hasWritten = cinquainWriteRange(key, key_length, len,
-                                        value, value_length, file_size);
-    return hasWritten > 0 ? hasWritten + len : hasWritten;
+
+    if (file_size > BIG_FILE_SIZE)
+        return bfileAppend(key, key_length, value, value_length, current_length, file_size);
+    int hasWritten = 0, tErrorNo;
+    workBlocks wbs = {NULL, 0};
+    cinquainSetWorkBlocks(&wbs, current_length, value_length, value);
+    unsigned int blockNum = wbs.wb[wbs.blocks-1].id; 
+    workBlock wb = {numks, 0, keyExLength, (char *)&blockNum};
+    
+    if (wbs.wb) {
+        while (wbs.blocks--) {
+            hasWritten += cinquainWriteBlock(key, key_length, &wbs.wb[wbs.blocks]);
+            if (errorNo)
+                break;
+        }
+        //roll back...
+        if (errorNo) {
+            tErrorNo = errorNo;
+            while (wbs.blocks++<blockNum && cinquainDeleteBlock(key, key_length, &wbs.wb[wbs.blocks]));
+            errorNo = errorNo ? errorNo : tErrorNo;
+        }
+        else
+            cinquainWriteBlock(key, key_length, &wb);
+        free(wbs.wb);
+    }
+    return !errorNo ? hasWritten+current_length : errorNo;
 }
 
 int cinquainIncrease(const char *key, const int key_length) {
@@ -188,7 +251,11 @@ int cinquainDecrease(const char *key, const int key_length) {
     return cinquainIncreaseBy(key, key_length, -1);
 }
 
-int cinquainRemove(const char *key, const int key_length) {
+int cinquainRemove(const char *key, const int key_length,
+                   const offset_t file_size) {
+
+    if (file_size > BIG_FILE_SIZE)
+        return bfileRemove(key, key_length, file_size);
     workBlock wb = {numks, 0, keyExLength, NULL};
     redisReply *r = cinquainReadBlock(key, key_length, &wb);
     if (r) {
@@ -220,10 +287,10 @@ int cinquainStrlen(const char *key, const int key_length) {
     return errorNo ? errorNo : (wb.id-1) * BLOCK_SIZE + len;
 }
 
-long long cinquainUsedMemoryRss()
+long long cinquainUsedMemory()
 {
-    int i = 0, j = 0, col = 21;
-    long long usedMemoryRss = 0, m = 0;
+    int i = 0, j = 0, col = 19;
+    long long usedMemory = 0, m = 0;
     char buf[64], *str=NULL;
     redisReply *r = NULL;
     for (i=0; i<redisServerNum; i++) {
@@ -235,8 +302,8 @@ long long cinquainUsedMemoryRss()
                     sscanf(str, "%s", buf);
                     str += strlen(buf) + 2;  //\r\n
                 }
-                sscanf(str, "used_memory_rss:%lld", &m);
-                usedMemoryRss += m;
+                sscanf(str, "used_memory:%lld", &m);
+                usedMemory += m;
             }
             else
                 break;
@@ -244,9 +311,9 @@ long long cinquainUsedMemoryRss()
                 freeReplyObject(r);
         }
     }
-    if (errorNo && r)
-        freeReplyObject(r);
-    return errorNo ? errorNo : usedMemoryRss;
+    //if (errorNo && r)
+    //    freeReplyObject(r);
+    return errorNo ? errorNo : usedMemory;
 }
 
 static redisReply *cinquainReadBlock(const char *key, const int key_length,
@@ -277,7 +344,23 @@ static int cinquainWriteBlock(const char *key, const int key_length,
     redisReply * r = NULL;
     if (c){
         r = redisCommand(c, "SETRANGE %b%b %u %b", key, key_length,
-                         &wb->id, 1, wb->offset, wb->buffer, wb->length);
+                         &wb->id, keyExLength, wb->offset, wb->buffer, wb->length);
+        if (!r || r->type!=REDIS_REPLY_INTEGER || r->integer!=wb->offset+wb->length)
+            cinquainErrLog(c, r);
+        if (r)
+            freeReplyObject(r);
+    }
+    return errorNo ? 0 : wb->length;
+}
+
+static int cinquainAppendBlock(const char *key, const int key_length,
+                              workBlock *wb){
+
+    redisContext * c = cinquainGetContext(key, key_length);
+    redisReply * r = NULL;
+    if (c){
+        r = redisCommand(c, "APPEND %b%b %b", key, key_length,
+                         &wb->id, keyExLength, wb->buffer, wb->length);
         if (!r || r->type!=REDIS_REPLY_INTEGER || r->integer!=wb->offset+wb->length)
             cinquainErrLog(c, r);
         if (r)
@@ -402,4 +485,65 @@ int cinquainGetErr() {
     if (errorNo)
         printf("%d : %s\n", errorNo, errorMsg);
     return errorNo;
+}
+
+static char *bfilePath(const char *key, const int key_length) {
+
+    memcpy(bfileRootpath+rootpathLen, key, key_length);
+    bfileRootpath[rootpathLen+key_length] = 0;
+    return bfileRootpath;
+}
+static char **bfileReadRange(const char *key, const int key_length,
+                         const offset_t offset, const offset_t length,
+                         const offset_t file_size) {
+
+    bfileBuffer = NULL;
+    FILE *fp = fopen(bfilePath(key, key_length), "rb");
+    if (fp) {
+        if (!fseeko(fp, offset, SEEK_SET)) {
+            bfileBuffer = calloc(sizeof(char), length+1);
+            if (fread(bfileBuffer, sizeof(char), length, fp) != sizeof(char)*length) {
+                free(bfileBuffer);
+                bfileBuffer = NULL;
+            }
+        }
+        fclose(fp);
+    }
+    return &bfileBuffer;
+}
+
+static int bfileWriteRange(const char *key, const int key_length,
+                       offset_t offset,
+                       const char *value, const offset_t value_length,
+                       const offset_t file_size) {
+
+    int hasWritten = 0;
+    FILE *fp = fopen(bfilePath(key, key_length), "wb");
+    if (fp) {
+        if (!fseeko(fp, offset, SEEK_SET)) {
+            hasWritten = fwrite(value, sizeof(char), value_length, fp);
+        }
+        fclose(fp);
+    }
+    return hasWritten;
+}
+static offset_t bfileAppend(const char *key, const int key_length,
+                        const char *value, const offset_t value_length,
+                        const offset_t current_length,
+                        const offset_t file_size) {
+
+    offset_t hasWritten = 0;
+    FILE *fp = fopen(bfilePath(key, key_length), "wb");
+    if (fp) {
+        if (!fseeko(fp, 0, SEEK_END)) {
+            hasWritten = fwrite(value, sizeof(char), value_length, fp);
+        }
+        fclose(fp);
+    }
+    return hasWritten+current_length;
+}
+static int bfileRemove(const char *key, const int key_length,
+                   const offset_t file_size) {
+
+    return unlink(bfilePath(key, key_length));
 }

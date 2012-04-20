@@ -34,7 +34,7 @@ range[2]=64
 range[3]=256
 clients_num[0]=1
 clients_num[1]=10
-#clients_num[2]=100
+clients_num[2]=50
 
 #save log for current executing
 log=$(date '+%Y-%m-%d_%H:%M:%S').$2.log
@@ -44,7 +44,7 @@ cline=0
 
 for i in ${range[@]}; do
     for j in ${clients_num[@]}; do
-        echo $j clients range in $i KB, each client W/R throughput list in MB/s:>>$log
+        echo $j clients range in $i KB, each client random R/W throughput list in MB/s:>>$log
             line=$((line+1))
             for((k=0; k<j; k++))
             do

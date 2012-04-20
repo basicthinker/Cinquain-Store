@@ -35,7 +35,7 @@
 #define CINQUAIN_ERR_REPLY -10
 
 typedef struct {
-  unsigned char id;
+  unsigned int id;
   offset_t offset;
   offset_t length;
   char * buffer;
@@ -43,7 +43,7 @@ typedef struct {
 
 typedef struct {
   workBlock *wb;
-  unsigned char blocks;
+  unsigned int blocks;
 } workBlocks;
 
 #endif // CINQUAIN_STORE_INTERNAL_H_

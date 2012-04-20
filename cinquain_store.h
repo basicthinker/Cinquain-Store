@@ -60,7 +60,7 @@ char **cinquainReadRange(const char *key, const int key_length,
 //
 // In this function, the address of the buffer host
 // should be restored via cinquainBufferHost.
-int cinquainDeleteBufferHost(const char **value);
+int cinquainDeleteBufferHost(const char **value, const offset_t file_size);
 
 // Writes data to a byte range of the value
 // associated with the specified key.
@@ -115,7 +115,8 @@ int cinquainDecrease(const char *key, const int key_length);
 // Multiple values include its reference count, and physical blocks of
 // a large logic value.
 // return 0 for success & other values fail
-int cinquainRemove(const char *key, const int key_length);
+int cinquainRemove(const char *key, const int key_length,
+                   const offset_t file_size);
 
 //return the length of the string vaule stored at the key.
 //return 0 if key does not exist.
@@ -125,8 +126,8 @@ int cinquainStrlen(const char *key, const int key_length);
 //return 0 if no errors.
 int cinquainGetErr();
 
-//return the memory redis servers used as OS seen in bytes.
+//return the memory redis servers used in bytes.
 //return error number if has errors.
-long long cinquainUsedMemoryRss();
+long long cinquainUsedMemory();
 
 #endif // CINQUAIN_STORE_H_

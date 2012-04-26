@@ -29,7 +29,7 @@
 // const varibles
 // in bytes
 //#define BLOCK_SIZE (512*1024*1024) 
-#define BLOCK_SIZE (8*1024*1024) 
+#define BLOCK_SIZE (4*1024*1024) 
 #define BIG_FILE_SIZE (16*1024*1024)
 
 #include <stdio.h>

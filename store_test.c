@@ -53,7 +53,7 @@ long long total = 3;
 int unit = 10000;
 int pi = 28;
 int b[29] = {0};
-int tunit = 128;
+int tunit = 8;
 
 int main (int argc, const char *argv[])
 {
@@ -77,18 +77,18 @@ int main (int argc, const char *argv[])
     range *= 1024; //KB
 
     //printf("%lld\n", cinquainUsedMemoryRss());
-    fill_data();
+    //fill_data();
 
-    //printf("%lf\n", read_test(range, 1000));
-    //printf("%lf\n", write_test(range, 1)/M);
+    //printf("%lf\n", read_test(range, 1000)/M);
+    //printf("%lf\n", write_test(range, 1000)/M);
     // test ...
-    /* 
+     
     for (i=0 ; i<n; i++) {
-        r[i] = read_test(range, 5000) / M;
+        r[i] = read_test(range, 10) / M;
         sleep(5);
     }
     for (i=0 ; i<n; i++) {
-        w[i] = write_test(range, 5000) / M;
+        w[i] = write_test(range, 10) / M;
         sleep(5);
     }
     isort(r, n);
@@ -99,7 +99,7 @@ int main (int argc, const char *argv[])
     for (i=0; i<n; i++)
         printf("%lf\t", w[i]);
     printf("\n");
-    */
+    
 
     //function_test();
 
@@ -168,7 +168,7 @@ double read_test(offset_t range, int n)
             r = (const char **)cinquainReadRange((char *)(&key), sizeof(key), offset, range, size);
             gettimeofday(&fend, NULL);
             ftime += ((fend.tv_sec-fstart.tv_sec)*1000000 + fend.tv_usec - fstart.tv_usec);
-            usleep(range/tunit);
+            //usleep(range/tunit);
             
             if (r) {
                 hasRead += range;
@@ -205,7 +205,7 @@ double write_test(offset_t range, int n)
     for (i=0; i<n; i++) {
         offset = 0;
         key = rand()*total*unit/RAND_MAX;
-        size = 1<<27;//1<<bSearch(b, pi, key);
+        size = 1<<bSearch(b, pi, key);
         //printf("%lld %d\n", key, size);
         while (offset < size) {
             count = size - offset > range ? range : size - offset;

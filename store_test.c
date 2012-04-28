@@ -62,7 +62,7 @@ int main (int argc, const char *argv[])
         return 0;
     //init
     int serverNum = cinquainInitBackStore(argc, argv);
-    //printf("servernum %d\n", serverNum);
+    printf("servernum %d\n", serverNum);
     if (serverNum <= 0)
         return; 
 
@@ -80,9 +80,9 @@ int main (int argc, const char *argv[])
     //fill_data();
 
     //printf("%lf\n", read_test(range, 1000)/M);
-    //printf("%lf\n", write_test(range, 1000)/M);
+    //printf("%lf\n", write_test(range, 100)/M);
     // test ...
-     
+    /* 
     for (i=0 ; i<n; i++) {
         r[i] = read_test(range, 10) / M;
         sleep(5);
@@ -99,9 +99,9 @@ int main (int argc, const char *argv[])
     for (i=0; i<n; i++)
         printf("%lf\t", w[i]);
     printf("\n");
-    
+    */
 
-    //function_test();
+    function_test();
 
     return 0;
 }
@@ -214,7 +214,7 @@ double write_test(offset_t range, int n)
             gettimeofday(&fend, NULL);
             usleep(range/tunit);
             ftime += ((fend.tv_sec-fstart.tv_sec)*1000000 + fend.tv_usec - fstart.tv_usec);
-            //cinquainGetErr();
+            cinquainGetErr();
             offset += count;
             //cur += count;
         }
@@ -232,6 +232,7 @@ void function_test()
 
     //buffer & reply handler
     char *buffer = malloc(sizeof(char)*128*M);
+    fill_buffer("largefile", buffer, 128*M);
     const char **r;
 
     //gen random key ...

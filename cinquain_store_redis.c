@@ -31,6 +31,10 @@
 //#define BLOCK_SIZE (512*1024*1024) 
 #define BLOCK_SIZE (4*1024*1024) 
 #define BIG_FILE_SIZE (16*1024*1024)
+// for cinquain redis command...
+#define ARGV_ARRAY_LEN 4
+#define KEY_LEN 32
+#define BUF_LEN 16
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -93,6 +97,8 @@ static offset_t bfileAppend(const char *key, const int key_length,
 static int bfileRemove(const char *key, const int key_length,
                    const offset_t file_size);
 static char *bfilePath(const char *key, const int key_length); 
+
+static redisReply *cinquainRedisCommand(redisContext *c, char *cmd, const char *key, const int key_length, const char *key_ex, const int key_ex_length, offset_t start, offset_t end, char *value, offset_t value_length);
 
 
 int cinquainInitBackStore(const int argc, const char *argv[]) {
@@ -199,7 +205,7 @@ int cinquainWriteRange(const char *key, const int key_length,
             r = cinquainReadBlock(key, key_length, &wb);
             if (r) {
                 oldBlockNum = *((unsigned int *)r->str);
-            //    freeReplyObject(r);
+                freeReplyObject(r);
             }
             if (oldBlockNum < blockNum) {
                 wb.buffer = (char *)&blockNum;
@@ -322,7 +328,8 @@ static redisReply *cinquainReadBlock(const char *key, const int key_length,
     redisContext *c = cinquainGetContext(key, key_length);
     redisReply *r = NULL;
     if (c) {
-        r = redisCommand(c, "GETRANGE %b%b %u %u", key, key_length, &wb->id, keyExLength, wb->offset, wb->offset+wb->length-1);
+        //r = redisCommand(c, "GETRANGE %b%b %u %u", key, key_length, &wb->id, keyExLength, wb->offset, wb->offset+wb->length-1);
+        r = cinquainRedisCommand(c, "GETRANGE", key, key_length, (const char *)&wb->id, keyExLength, wb->offset, wb->offset+wb->length-1, NULL, 0);
 	if (r && r->type==REDIS_REPLY_STRING && r->len>0) {
             if (wb->buffer)
                 memcpy(wb->buffer, r->str, r->len);
@@ -343,8 +350,10 @@ static int cinquainWriteBlock(const char *key, const int key_length,
     redisContext * c = cinquainGetContext(key, key_length);
     redisReply * r = NULL;
     if (c){
-        r = redisCommand(c, "SETRANGE %b%b %u %b", key, key_length,
-                         &wb->id, keyExLength, wb->offset, wb->buffer, wb->length);
+        //r = redisCommand(c, "SETRANGE %b%b %u %b", key, key_length,
+        //                 &wb->id, keyExLength, wb->offset, wb->buffer, wb->length);
+        r = cinquainRedisCommand(c, "SETRANGE", key, key_length,
+                         (const char *)&wb->id, keyExLength, wb->offset, 0, wb->buffer, wb->length);
         if (!r || r->type!=REDIS_REPLY_INTEGER || r->integer!=wb->offset+wb->length)
             cinquainErrLog(c, r);
         if (r)
@@ -359,8 +368,10 @@ static int cinquainAppendBlock(const char *key, const int key_length,
     redisContext * c = cinquainGetContext(key, key_length);
     redisReply * r = NULL;
     if (c){
-        r = redisCommand(c, "APPEND %b%b %b", key, key_length,
-                         &wb->id, keyExLength, wb->buffer, wb->length);
+        //r = redisCommand(c, "APPEND %b%b %b", key, key_length,
+        //                 &wb->id, keyExLength, wb->buffer, wb->length);
+        r = cinquainRedisCommand(c, "APPEND", key, key_length,
+                         (const char *)&wb->id, keyExLength, 0, 0, wb->buffer, wb->length);
         if (!r || r->type!=REDIS_REPLY_INTEGER || r->integer!=wb->offset+wb->length)
             cinquainErrLog(c, r);
         if (r)
@@ -376,7 +387,8 @@ static int cinquainStrlenBlock(const char *key, const int key_length,
     redisReply * r = NULL;
     int len = 0;
     if (c){
-        r = redisCommand(c, "STRLEN %b%b", key, key_length, &wb->id, keyExLength);
+        //r = redisCommand(c, "STRLEN %b%b", key, key_length, &wb->id, keyExLength);
+        r = cinquainRedisCommand(c, "STRLEN", key, key_length, (const char *)&wb->id, keyExLength, 0, 0, NULL, 0);
         if (!r || r->type!=REDIS_REPLY_INTEGER)
             cinquainErrLog(c, r);
         else
@@ -393,7 +405,8 @@ static int cinquainDeleteBlock(const char *key, const int key_length,
     redisContext *c = cinquainGetContext(key, key_length);
     redisReply *r = NULL;
     if (c) {
-        r = redisCommand(c, "DEL %b%b", key, key_length, &wb->id, keyExLength);
+        //r = redisCommand(c, "DEL %b%b", key, key_length, &wb->id, keyExLength);
+        r = cinquainRedisCommand(c, "DEL", key, key_length, (const char *)&wb->id, keyExLength, 0, 0, NULL, 0);
 	if (!r || r->type!=REDIS_REPLY_INTEGER || r->integer!=1)
             cinquainErrLog(c, r);
         if (r)
@@ -408,7 +421,8 @@ static int cinquainIncreaseBy(const char *key, const int key_length,
     redisReply *r = NULL;
     int val = 0;
     if (c) {
-        r = increment > 0 ? redisCommand(c, "INCRBY %b%b %u", key, key_length, &refks, keyExLength, increment) : redisCommand(c, "DECRBY %b%b %u", key, key_length, &refks, keyExLength, -increment);
+        //r = increment > 0 ? redisCommand(c, "INCRBY %b%b %u", key, key_length, &refks, keyExLength, increment) : redisCommand(c, "DECRBY %b%b %u", key, key_length, &refks, keyExLength, -increment);
+        r = increment > 0 ? cinquainRedisCommand(c, "INCR", key, key_length, (const char *)&refks, keyExLength, 0, 0, NULL, 0) : cinquainRedisCommand(c, "DECR", key, key_length, (const char *)&refks, keyExLength, 0, 0, NULL, 0);
         if (r && r->type==REDIS_REPLY_INTEGER)
             val = r->integer;
         else
@@ -546,4 +560,43 @@ static int bfileRemove(const char *key, const int key_length,
                    const offset_t file_size) {
 
     return unlink(bfilePath(key, key_length));
+}
+
+static redisReply *cinquainRedisCommand(redisContext *c, char *cmd, const char *key, const int key_length, const char *key_ex, const int key_ex_length, offset_t start, offset_t end, char *value, offset_t value_length) {
+    int argc = 2;
+    char *argv[ARGV_ARRAY_LEN];
+    int argvlen[ARGV_ARRAY_LEN];
+    char rkey[KEY_LEN];
+    char sbuf[BUF_LEN];
+    char ebuf[BUF_LEN];
+    argv[0] = cmd;
+    argvlen[0] = strlen(cmd);
+    memcpy(rkey, key, key_length);
+    memcpy(rkey+key_length, key_ex, key_ex_length);
+    rkey[key_length+key_ex_length] = '\0';
+    argv[1] = rkey;
+    argvlen[1] = key_length + key_ex_length;
+    if (strcmp(cmd, "GETRANGE") == 0) {
+        sprintf(sbuf, "%u", start);
+        argv[2] = sbuf;
+        argvlen[2] = strlen(sbuf);
+        sprintf(ebuf, "%u", end);
+        argv[3] = ebuf;
+        argvlen[3] = strlen(ebuf);
+        argc = 4;
+    }
+    else if (strcmp(cmd, "SETRANGE") == 0) {
+        sprintf(sbuf, "%u", start);
+        argv[2] = sbuf;
+        argvlen[2] = strlen(sbuf);
+        argv[3] = value;
+        argvlen[3] = value_length;
+        argc = 4;
+    }
+    else if (strcmp(cmd, "APPEND") == 0) {
+        argv[2] = value;
+        argvlen[2] = value_length;
+        argc = 3;
+    }
+    return redisCommandArgv(c, argc, (const char **)argv, argvlen);
 }

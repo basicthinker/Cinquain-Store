@@ -2,5 +2,5 @@ This sub-project provides a highly efficient key-value store that supports arbit
 
 Nowadays, there are already many mature key-value stores. But traditional key-value semantics expect a "small" value, either by limiting the volume taken by a value, or with only monolithic access to values. Meanwhile, traditional file systems take the role to mange large objects that are accessible in byte ranges. In Cinquain, we meet the requirement to balance between these two traditional models - the value should be efficiently located by a key but conveniently accessed like a file.
 
-We use Redis (http://redis.io/) as the back store.
+We create this branch with Berkeley DB (http://www.oracle.com/technetwork/products/berkeleydb) as the back store.
 

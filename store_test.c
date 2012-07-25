@@ -80,9 +80,9 @@ int main (int argc, const char *argv[])
     //fill_data();
 
     //printf("%lf\n", read_test(range, 1000)/M);
-    //printf("%lf\n", write_test(range, 1000)/M);
+    printf("%lf\n", write_test(range, 100)/M);
     // test ...
-     
+    /* 
     for (i=0 ; i<n; i++) {
         r[i] = read_test(range, 10) / M;
         sleep(5);
@@ -100,7 +100,7 @@ int main (int argc, const char *argv[])
         printf("%lf\t", w[i]);
     printf("\n");
     
-
+*/
     //function_test();
 
     return 0;

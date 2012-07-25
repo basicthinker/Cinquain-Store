@@ -80,7 +80,7 @@ int main (int argc, const char *argv[])
     //fill_data();
 
     //printf("%lf\n", read_test(range, 1000)/M);
-    //printf("%lf\n", write_test(range, 100)/M);
+    printf("%lf\n", write_test(range, 100)/M);
     // test ...
     /* 
     for (i=0 ; i<n; i++) {
@@ -99,9 +99,8 @@ int main (int argc, const char *argv[])
     for (i=0; i<n; i++)
         printf("%lf\t", w[i]);
     printf("\n");
-    */
-
-    function_test();
+*/
+    //function_test();
 
     return 0;
 }

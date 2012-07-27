@@ -37,9 +37,14 @@ typedef unsigned int offset_t;
   ((type *)((char *)(ptr)-(unsigned long)(&((type *)0)->member)))
 
 // Initializes the back store.
-// Returns the number of alive instances of back store. 
+// Returns 0 for success & 
 //    Negative values indicate error.
 int cinquainInitBackStore(const int argc, const char *argv[]);
+
+// Initializes the back store.
+// Returns 0 for success & 
+//    Negative values indicate error.
+int cinquainCloseBackStore();
 
 // Reads byte-range data from the value associated with the specified key.
 // To avoid unnecessary memory copy, no outside memory buffer is allocated,
@@ -51,7 +56,7 @@ int cinquainInitBackStore(const int argc, const char *argv[]);
 //
 // A null pointer is returned on error or if the requested length of data
 // cannot be fulfilled.
-char **cinquainReadRange(const char *key, const int key_length,
+char *cinquainReadRange(const char *key, const int key_length,
                          const offset_t offset, const offset_t length,
                          const offset_t file_size);
 
@@ -118,16 +123,8 @@ int cinquainDecrease(const char *key, const int key_length);
 int cinquainRemove(const char *key, const int key_length,
                    const offset_t file_size);
 
-//return the length of the string vaule stored at the key.
-//return 0 if key does not exist.
-int cinquainStrlen(const char *key, const int key_length);
-
 //return the error number.
 //return 0 if no errors.
 int cinquainGetErr();
-
-//return the memory redis servers used in bytes.
-//return error number if has errors.
-long long cinquainUsedMemory();
 
 #endif // CINQUAIN_STORE_H_

@@ -38,9 +38,10 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "db.h"
+
 #include "cinquain_store.h"
 #include "internal.h"
-#include <db.h>
 
 // bdb context handler
 static DB_ENV *db_env;

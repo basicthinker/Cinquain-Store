@@ -1,0 +1,3 @@
+#CINQUAIN STORE BDB CONFIG
+set_cachesize 1 0 1
+set_open_flags DB_THREAD on

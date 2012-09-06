@@ -28,10 +28,10 @@
 // const varibles
 // in bytes
 
-#define BIG_FILE_SIZE (16*1024*1024)
+#define BIG_FILE_SIZE (1024*1024*1024)
 
 #define NAME_LEN 16
-#define DEFAULT_DB_NAME cinquain
+#define DEFAULT_DB_HOME "./bdb"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -85,14 +85,13 @@ int cinquainInitBackStore(const int argc, const char *argv[]) {
     char *db_name = malloc(sizeof(char)*NAME_LEN);
     char *db_filename = malloc(sizeof(char)*NAME_LEN);
     strcpy(db_name, argv[1]);
-    //strcpy(db_name, "DEFAULT_DB_NAME");
     strcpy(db_filename, db_name);
     strcat(db_filename, ".db");
 
     if (! (errorNo = db_env_create(&db_env, 0)) && 
-        ! (errorNo = db_env->open(db_env, NULL, DB_CREATE | DB_INIT_MPOOL, 0)) && 
+        ! (errorNo = db_env->open(db_env, DEFAULT_DB_HOME, DB_CREATE | DB_INIT_MPOOL | DB_INIT_LOCK | DB_INIT_LOG | DB_INIT_TXN, 0)) && 
         ! (errorNo = db_create(&db, db_env, 0)) &&
-        ! (errorNo = db->open(db, NULL, db_filename, db_name, DB_BTREE, DB_CREATE, 0))) {
+        ! (errorNo = db->open(db, NULL, db_filename, db_name, DB_BTREE, DB_CREATE | DB_AUTO_COMMIT, 0))) {
         errorNo = 0;
     }
     else
@@ -104,8 +103,10 @@ int cinquainCloseBackStore() {
     //close db & db_env
     if (! (errorNo = db->close(db, 0)))
         return (errorNo = db_env->close(db_env, 0));
-    else
+    else {
+        db_env->close(db_env, 0);
         return errorNo;
+    }
 }
 
 char *cinquainReadRange(const char *key, const int key_length,
@@ -120,15 +121,16 @@ char *cinquainReadRange(const char *key, const int key_length,
     memset(&db_data, 0, sizeof(DBT));
     db_key.data = (void *)key;
     db_key.ulen = db_key.size = key_length;
-    //db_key.flags = DB_DBT_USERMEM;
-    db_data.flags = DB_DBT_PARTIAL;
+    db_data.flags = DB_DBT_MALLOC | DB_DBT_PARTIAL;
     db_data.dlen = length;
     db_data.doff = offset;
     if (! (errorNo = db->get(db, NULL, &db_key, &db_data, 0))) {
         //copy to buffer...
-        buffer = (char *)malloc(sizeof(char) * (db_data.size + 1));
-        memcpy(buffer, db_data.data, db_data.size);
-        buffer[db_data.size] = 0;
+        //buffer = (char *)malloc(sizeof(char) * (db_data.size + 1));
+        //memcpy(buffer, db_data.data, db_data.size);
+        //buffer[db_data.size] = 0;
+        buffer = (char *)db_data.data;
+        buffer[length] = 0;
         return buffer;
     }
     return NULL;
@@ -184,9 +186,13 @@ int cinquainDecrease(const char *key, const int key_length) {
 int cinquainIncreaseBy(const char *key, const int key_length, int increment) {
 
     DBT db_key, db_data;
+    DB_TXN *txn;
     unsigned int ref = 0;
     memset(&db_key, 0, sizeof(DBT));
     memset(&db_data, 0, sizeof(DBT));
+    //get the txn handle
+    if ( errorNo = db_env->txn_begin(db_env, NULL, &txn, 0) )
+        return errorNo;
     //record key reference with a suffix 'r'
     char *key_ref = cinquainKeyRef(key, key_length);
     db_key.data = (void *)key_ref;
@@ -194,13 +200,18 @@ int cinquainIncreaseBy(const char *key, const int key_length, int increment) {
     db_data.data = (void *)&ref;
     db_data.size = db_data.ulen = sizeof(ref);
     db_data.flags = DB_DBT_USERMEM;
-    if ((! (errorNo = db->get(db, NULL, &db_key, &db_data, 0))) || (errorNo == DB_NOTFOUND)) {
+    if ((! (errorNo = db->get(db, txn, &db_key, &db_data, 0))) || (errorNo == DB_NOTFOUND)) {
         ref = (ref+increment>0 ? ref+increment : 0);
-        if (! (errorNo = db->put(db, NULL, &db_key, &db_data, 0))) {
+        if (! (errorNo = db->put(db, txn, &db_key, &db_data, 0))) {
             free(key_ref);
-            return ref;
+            if (! (errorNo = txn->commit(txn, 0)))
+                return ref;
         }
+        else
+            txn->abort(txn);
     }
+    else
+        txn->abort(txn);
     return errorNo;
 }
 
@@ -210,6 +221,7 @@ int cinquainRemove(const char *key, const int key_length,
     if (file_size > BIG_FILE_SIZE)
         return bfileRemove(key, key_length, file_size);
     DBT db_key, db_keyr;
+    DB_TXN *txn;
     memset(&db_key, 0, sizeof(DBT));
     memset(&db_keyr, 0, sizeof(DBT));
     db_key.data = (void *)key;
@@ -218,12 +230,20 @@ int cinquainRemove(const char *key, const int key_length,
     char *key_ref = cinquainKeyRef(key, key_length);
     db_keyr.data = (void *)key_ref;
     db_keyr.size = strlen(key_ref);
-    if ((! (errorNo = db->del(db, NULL, &db_keyr, 0))) || (errorNo == DB_NOTFOUND)) {
+    //get the txn handle
+    if ( errorNo = db_env->txn_begin(db_env, NULL, &txn, 0) )
+        return errorNo;
+
+    if ((! (errorNo = db->del(db, txn, &db_keyr, 0))) || (errorNo == DB_NOTFOUND)) {
         free(key_ref);
-        return (errorNo = db->del(db, NULL, &db_key, 0));
+        if (! (errorNo = db->del(db, txn, &db_key, 0)))
+            return (errorNo = txn->commit(txn, 0));
+        else
+            txn->abort(txn);
     }
     else
-        return errorNo;
+        txn->abort(txn);
+    return errorNo;
 }
 
 int cinquainGetErr() {

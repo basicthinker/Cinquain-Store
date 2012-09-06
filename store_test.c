@@ -57,7 +57,7 @@ int tunit = 8;
 
 int main (int argc, const char *argv[])
 {
-    //args : config range(KB) n
+    //args : db_filename range(KB) n
     if (argc != 4)
         return -1;
     //init
@@ -74,16 +74,17 @@ int main (int argc, const char *argv[])
     sscanf(argv[3], "%d", &n);
     range *= 1024; //KB
 
-    //fill_data();
+    fill_data();
 
     //printf("%lf\n", read_test(range, 1000)/M);
-    //printf("%lf\n", write_test(range, 100)/M);
+    //printf("%lf\n", write_test(range, 10)/M);
     // test ...
+/*
     for (i=0 ; i<n; i++) {
         r[i] = read_test(range, 100) / M;
     }
     for (i=0 ; i<n; i++) {
-        w[i] = write_test(range, 100) / M;
+        w[i] = write_test(range, 10) / M;
     }
     isort(r, n);
     isort(w, n);
@@ -93,6 +94,7 @@ int main (int argc, const char *argv[])
     for (i=0; i<n; i++)
         printf("%lf\t", w[i]);
     printf("\n");
+*/
     //function_test();
 
     cinquainCloseBackStore();
@@ -218,9 +220,9 @@ void function_test()
     //long rn;
     //srand(time(0));
     //rn = rand();
-    char rn[16] = "test";
+    char rn[16] = "tesa";
     memset(buffer, 'a', bufferSize);
-    //if (fill_buffer("largefile", buffer, bufferSize) != 0)
+    //if (fill_buffer("largefile_bak", buffer, bufferSize) != 0)
     //    return;
     //write range with buffer at specific offset
     cinquainWriteRange(rn, 4, 0, buffer, bufferSize, bufferSize);
@@ -237,7 +239,7 @@ void function_test()
     //    printf("!!!write error!!!\n");
     if(r)
         free(r);
-    r = (char *)cinquainReadRange(rn, 4, 6, bufferSize-6, bufferSize-6);
+    r = (char *)cinquainReadRange(rn, 4, 4, bufferSize-6, bufferSize-6);
     cinquainGetErr();
     printf("%s\n", r);
     if(r)
@@ -245,12 +247,12 @@ void function_test()
     free(buffer);
     //incr & decr key ref
     //for (i=0; i<98; i++)
-    //    printf("incr %d\n", cinquainIncrease(rn, 4));
-    //printf("decr %d\n", cinquainDecrease(rn, 4));
-    //cinquainGetErr();
+        printf("incr %d\n", cinquainIncrease(rn, 4));
+    printf("decr %d\n", cinquainDecrease(rn, 4));
+    cinquainGetErr();
     //remove key 
-    //cinquainRemove(rn, 4, bufferSize);
-    //cinquainGetErr();
+    cinquainRemove(rn, 4, bufferSize);
+    cinquainGetErr();
 }
 
 int str_cmp(const char *src, const char *dest, int len)

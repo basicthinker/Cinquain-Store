@@ -1,0 +1,6 @@
+#CINQUAIN STORE BDB CONFIG
+set_cachesize 1 0 1
+set_open_flags DB_THREAD on
+set_open_flags DB_INIT_REP on
+repmgr_site 166.111.131.198 20771 db_local_site on
+repmgr_site 166.111.131.198 20770 db_bootstrap_helper on

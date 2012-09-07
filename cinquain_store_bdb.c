@@ -130,7 +130,7 @@ char *cinquainReadRange(const char *key, const int key_length,
         //memcpy(buffer, db_data.data, db_data.size);
         //buffer[db_data.size] = 0;
         buffer = (char *)db_data.data;
-        buffer[length] = 0;
+        buffer[db_data.size] = 0;
         return buffer;
     }
     return NULL;

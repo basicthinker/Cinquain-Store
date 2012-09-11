@@ -1,6 +1,6 @@
-This sub-project provides a highly efficient key-value store that supports arbitrarily large values and parallel byte-range access to data.
+This sub-project provides (1) a highly efficient key-value store that supports arbitrarily large values and parallel byte-range access to data, and (2) a FUSE-based file system built upon the key-value store.
 
-Nowadays, there are already many mature key-value stores. But traditional key-value semantics expect a "small" value, either by limiting the volume taken by a value, or with only monolithic access to values. Meanwhile, traditional file systems take the role to mange large objects that are accessible in byte ranges. In Cinquain, we meet the requirement to balance between these two traditional models - the value should be efficiently located by a key but conveniently accessed like a file.
+Nowadays, there are already many mature key-value stores. But traditional key-value semantics expect a "small" value, either by limiting the volume taken by a value, or with only monolithic access to values. Meanwhile, traditional file systems take the role to mange large objects that are accessible in byte ranges. In Cinquain, we construct an overlay on existing key-value stores to meet the requirement to balance between these two traditional models - the value should be efficiently located by a key but conveniently accessed like a file.
 
-We use Redis (http://redis.io/) as the back store.
+We separately use Redis (http://redis.io/), Berkley DB and its Hight Availability version as the back stores in three branches.
 

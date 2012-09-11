@@ -4,8 +4,9 @@
 
 #include "cinquain_store.h"
 
+#include <string.h>
 #include <string>
-#include <hash_map>
+#include <unordered_map>
 #include <pthread.h>
 
 using namespace std;
@@ -13,7 +14,7 @@ using namespace std;
 #define NUM_BUCKETS 1000
 
 // TODO Metadata
-static hash_map<string, struct stat> gKeyMeta(NUM_BUCKETS);
+static unordered_map<string, struct stat> gKeyMeta(NUM_BUCKETS);
 static pthread_rwlock_t gMetaLock = PTHREAD_RWLOCK_INITIALIZER;
 
 static inline void SetKeyMeta(const char *ckey, const struct stat* meta) {
@@ -30,11 +31,11 @@ static inline void GetKeyMeta(const char *ckey, struct stat* meta) {
   pthread_rwlock_unlock(&gMetaLock);
 }
 
-static char *PathPick(consit char *path) {
+static char *PathPick(const char *path) {
   const int len = strlen(path);
   if (len == 0) return NULL;
 
-  char *last = path + len - 1;
+  char *last = (char *)(path + len - 1);
   while (last > path && *last != '/') {
     --last;
   }
@@ -43,8 +44,8 @@ static char *PathPick(consit char *path) {
 }
 
 int cinqGetAttr(const char *path, struct stat *attr) {
-  char ckey = PathPick(path);
-  GetKeyMeta(path, attr);
+  char *ckey = PathPick(path);
+  GetKeyMeta(ckey, attr);
   return 0;
 }
 

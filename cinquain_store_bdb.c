@@ -38,7 +38,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "db.h"
+#include <db.h>
 
 #include "cinquain_store.h"
 #include "internal.h"
@@ -58,7 +58,7 @@ static int cinquainIncreaseBy(const char *key, const int key_length, int increme
 static char *cinquainKeyRef(const char *key, const int key_length);
 static void cinquainReadAll();
 
-static char *bfileReadRange(const char *key, const int key_length,
+static char **bfileReadRange(const char *key, const int key_length,
                          const offset_t offset, const offset_t length,
                          const offset_t file_size);
 static int bfileWriteRange(const char *key, const int key_length,
@@ -109,14 +109,14 @@ int cinquainCloseBackStore() {
     }
 }
 
-char *cinquainReadRange(const char *key, const int key_length,
+char **cinquainReadRange(const char *key, const int key_length,
                          const offset_t offset, const offset_t length,
                          const offset_t file_size) {
 
     if (file_size > BIG_FILE_SIZE)
         return bfileReadRange(key, key_length, offset, length, file_size);
     DBT db_key, db_data;
-    char *buffer = NULL;
+    char ** readBuffer = (char **)malloc(sizeof(char *));
     memset(&db_key, 0, sizeof(DBT));
     memset(&db_data, 0, sizeof(DBT));
     db_key.data = (void *)key;
@@ -129,9 +129,9 @@ char *cinquainReadRange(const char *key, const int key_length,
         //buffer = (char *)malloc(sizeof(char) * (db_data.size + 1));
         //memcpy(buffer, db_data.data, db_data.size);
         //buffer[db_data.size] = 0;
-        buffer = (char *)db_data.data;
-        buffer[length] = 0;
-        return buffer;
+        *readBuffer = (char *)db_data.data;
+        (*readBuffer)[length] = 0;
+        return readBuffer;
     }
     return NULL;
 }
@@ -290,23 +290,23 @@ static char *bfilePath(const char *key, const int key_length) {
     bfileRootpath[rootpathLen+key_length] = 0;
     return bfileRootpath;
 }
-static char *bfileReadRange(const char *key, const int key_length,
+static char **bfileReadRange(const char *key, const int key_length,
                          const offset_t offset, const offset_t length,
                          const offset_t file_size) {
 
-    char *bfileBuffer = NULL;
+    char ** readBuffer = (char **)malloc(sizeof(char *));
     FILE *fp = fopen(bfilePath(key, key_length), "rb");
     if (fp) {
         if (!fseeko(fp, offset, SEEK_SET)) {
-            bfileBuffer = calloc(sizeof(char), length+1);
-            if (fread(bfileBuffer, sizeof(char), length, fp) != sizeof(char)*length) {
-                free(bfileBuffer);
-                bfileBuffer = NULL;
+            *readBuffer = calloc(sizeof(char), length+1);
+            if (fread(*readBuffer, sizeof(char), length, fp) != sizeof(char)*length) {
+                free(*readBuffer);
+                *readBuffer = NULL;
             }
         }
         fclose(fp);
     }
-    return bfileBuffer;
+    return readBuffer;
 }
 
 static int bfileWriteRange(const char *key, const int key_length,

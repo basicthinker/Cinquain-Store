@@ -74,7 +74,7 @@ int main (int argc, const char *argv[])
     sscanf(argv[3], "%d", &n);
     range *= 1024; //KB
 
-    fill_data();
+    //fill_data();
 
     //printf("%lf\n", read_test(range, 1000)/M);
     //printf("%lf\n", write_test(range, 10)/M);
@@ -95,7 +95,7 @@ int main (int argc, const char *argv[])
         printf("%lf\t", w[i]);
     printf("\n");
 */
-    //function_test();
+    function_test();
 
     cinquainCloseBackStore();
     return 0;
@@ -131,7 +131,7 @@ double read_test(offset_t range, int n)
     int i;
     long long key = 0, hasRead = 0, ftime = 0;
     offset_t offset, size;
-    char *r;
+    char **r;
     struct timeval start, end, fstart, fend;
     srand(time(0));
 
@@ -144,14 +144,14 @@ double read_test(offset_t range, int n)
         //printf("%lld %d\n", key, size);
         while (offset < size) {
             gettimeofday(&fstart, NULL);
-            r = (char *)cinquainReadRange((char *)(&key), sizeof(key), offset, range, size);
+            r = (char **)cinquainReadRange((char *)(&key), sizeof(key), offset, range, size);
             gettimeofday(&fend, NULL);
             ftime += ((fend.tv_sec-fstart.tv_sec)*1000000 + fend.tv_usec - fstart.tv_usec);
             //usleep(range/tunit);
             
-            if (r) {
+            if (*r) {
                 hasRead += range;
-                free(r);
+                free(*r);
             }
             offset += range;
         }
@@ -214,7 +214,7 @@ void function_test()
     int i;
     int bufferSize = 16;
     char *buffer = malloc(sizeof(char)*bufferSize);
-    char *r;
+    char **r;
 
     //gen random key ...
     //long rn;
@@ -228,22 +228,22 @@ void function_test()
     cinquainWriteRange(rn, 4, 0, buffer, bufferSize, bufferSize);
     cinquainGetErr();
     //then read range as the same
-    r = (char *)cinquainReadRange(rn, 4, 0, bufferSize, bufferSize);
+    r = (char **)cinquainReadRange(rn, 4, 0, bufferSize, bufferSize);
     cinquainGetErr();
-    printf("%s\n", r);
+    printf("%s\n", *r);
+    //check correctness
+    if (!(*r) || str_cmp(buffer, *r, bufferSize))
+        printf("!!!write error!!!\n");
     memset(buffer, 'b', bufferSize);
     cinquainWriteRange(rn, 4, 5, buffer, bufferSize-10, bufferSize-10);
     cinquainGetErr();
-    //check correctness
-    //if (!r || str_cmp(buffer, r, bufferSize))
-    //    printf("!!!write error!!!\n");
-    if(r)
-        free(r);
-    r = (char *)cinquainReadRange(rn, 4, 4, bufferSize-6, bufferSize-6);
+    if(*r)
+        free(*r);
+    r = (char **)cinquainReadRange(rn, 4, 4, bufferSize-6, bufferSize-6);
     cinquainGetErr();
-    printf("%s\n", r);
-    if(r)
-        free(r);
+    printf("%s\n", *r);
+    if(*r)
+        free(*r);
     free(buffer);
     //incr & decr key ref
     //for (i=0; i<98; i++)

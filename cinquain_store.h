@@ -56,7 +56,7 @@ int cinquainCloseBackStore();
 //
 // A null pointer is returned on error or if the requested length of data
 // cannot be fulfilled.
-char *cinquainReadRange(const char *key, const int key_length,
+char **cinquainReadRange(const char *key, const int key_length,
                          const offset_t offset, const offset_t length,
                          const offset_t file_size);
 
